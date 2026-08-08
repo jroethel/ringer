@@ -368,3 +368,13 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-08-08 (glm-5.2, code-fix, normalize-once-batching w4): calcdate-stability run verdict FAIL x2 is a CHECK BUG, not model signal - the orchestrator's check string had a bash parse error (brace group closed with } where fi belonged), so the check died before running anything on both attempts. The model's attempt-1 code was correct (orchestrator re-ran every check step on the applied tree: 10 tests pass, ruff clean, full gate OVERALL: PASS, committed); attempt 2 correctly diagnosed the broken check and manually exported the patch. Treat both FAIL rows as amended; strong diagnostic signal.
 
 2026-08-08 - loop-improve (loop-stack-session, 1 fat code-feature task: working-skill refactor + new skill + vendored playbook + gate test): glm-5.2 (claude-zai) 1/1 first-try, 19.8m. Three sequential authoring tasks committed per plan; byte-exact contract compliance (four gate suites green in worktree AND re-derived at the gate; deep-read of the prose-extraction diff found zero deviations; all five mandated rephrases of vendored MIT playbook lines faithful). Confirms the tightly-specced authoring lane extends to skill-prose surgery, not just code. Orchestrator lesson (not model signal): `ringer.py lint` exits non-zero on advisory findings, so the `lint && run` launch chain silently never runs a manifest carrying a by-design finding - lint separately, review, then `run` alone.
+
+## sonnet-5 (Agent-tool transport)
+
+- 2026-08-08 - code-fix (audit-sweep run, loop-stack-session: 7-task plumbing
+  hardening as a single Agent-tool unit): first-attempt pass. Executed a
+  verbatim TDD plan (7 RED-GREEN-commit cycles) byte-exact; independent opus
+  validator passed all five criteria with zero scope violations. Signal: the
+  worker correctly attributed the one full-suite failure to a pre-existing
+  repo bug and reproduced it at the base commit instead of hacking around it.
+  Routed by benchmark prior (default Agent-tool execution worker); no re-route.
