@@ -148,6 +148,20 @@ checks and raw logs support — no vibes, no worker self-reports.
   read paths) plus an empirical XSS all-clear on the new DOM surfaces.
   Third proven-tier structured review today.
 
+- 2026-08-08 - loop-setup-reconcile (code-feature, harness claude-zai, loop-stack-session):
+  recorded fail-after-retry is MISATTRIBUTED - the check never ran. Ringer executes
+  checks via create_subprocess_shell -> /bin/sh (dash on this WSL host), which dies on
+  the check's first line (`set -uo pipefail`, "Illegal option -o pipefail"), so both
+  attempts burned against an unrunnable gate. Gate audit re-ran the full check under
+  bash against the surviving worktree: all six suites green, exactly 4 commits, clean
+  tree, footprint exactly the 8 owned files - work committed unchanged (3eaa7f9).
+- 2026-08-08 - same run, signal: the worker caught a real plan self-contradiction
+  (verbatim test needs `git rm --cached`, plan prose said bare `git rm -f`), deviated
+  correctly, and left a comment naming the reason. Second time GLM has diagnosed a
+  harness bug unprompted from the cheap lane. Amendment row appended to
+  AMENDMENTS-PENDING.md; harness fix (executable="/bin/bash" in _run_check) staged
+  for Jeremy, not applied.
+
 ## kimi-k2.7 via opencode (`openrouter/moonshotai/kimi-k2.7-code`)
 
 - 2026-07-06 — adversarial pre-merge review (aicred spark): passed on
