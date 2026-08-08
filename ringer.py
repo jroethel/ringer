@@ -8648,6 +8648,7 @@ class Verifier:
     async def _run_check(command: str, cwd: Path) -> tuple[int | None, bool, str]:
         proc = await asyncio.create_subprocess_shell(
             command,
+            executable="/bin/bash",  # /bin/sh is dash on some hosts and rejects `set -o pipefail`, killing bash-authored checks at line 1
             cwd=str(cwd),
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
