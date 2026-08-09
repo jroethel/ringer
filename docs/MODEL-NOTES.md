@@ -173,6 +173,20 @@ checks and raw logs support — no vibes, no worker self-reports.
   guessing wide, both correct calls. The report-your-reading discipline holds on the
   cheap lane.
 
+## opus via claude engine (`claude -p`, model `opus`)
+
+- 2026-08-09 - gitlab-glab-loop wave 3 (claude engine, model opus): code-feature x1,
+  first-try PASS on the run's risk-pinned unit (task-4-sweep: destructive archive
+  moves plus a judgment edit of an existing green suite, +343/-16). Signal: the
+  risk-concentration pin paid off first-try again; worker re-derived a plan count,
+  found it off by one for an accounted reason, and named one deliberate one-line
+  spec widening in its report instead of taking it silently.
+- 2026-08-09 - gitlab-glab-loop wave 3, code-review x1, first-try PASS
+  (task-4-review): walked 15 criteria, mutation-tested the guards it was asked to
+  verify, and cross-checked the one authorized test retarget by running the
+  pre-task suite against the new implementation. Verdict discipline held; two
+  advisory findings correctly routed to the orchestrator instead of self-fixed.
+
 ## kimi-k2.7 via opencode (`openrouter/moonshotai/kimi-k2.7-code`)
 
 - 2026-07-06 — adversarial pre-merge review (aicred spark): passed on
