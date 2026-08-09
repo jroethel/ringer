@@ -172,6 +172,10 @@ checks and raw logs support — no vibes, no worker self-reports.
   files (+358/-55); worker recorded two conservative readings in report.md instead of
   guessing wide, both correct calls. The report-your-reading discipline holds on the
   cheap lane.
+- 2026-08-09 - gitlab-glab-loop wave 4 (claude-zai engine): code-feature x1, first-try
+  PASS (task-5-migrate, +203/-20 across three files with a vendoring seam into
+  setup.sh). Mechanical end of the confirmed lane; no open questions, no retries.
+  Running tally this run: glm-5.2 is 4/4 first-try on code-feature.
 
 ## opus via claude engine (`claude -p`, model `opus`)
 
