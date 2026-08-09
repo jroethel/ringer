@@ -80,3 +80,11 @@ Agent prompt to run the injection and verify (paste into any capable session aft
 
 Root fix staged, Jeremy's to fire: `executable="/bin/bash"` in `_run_check`'s `create_subprocess_shell` call (ringer.py ~8649).
 - 2026-08-08 run normalize-once-batching-20260808T131030Z-p348363 task calcdate-stability (glm-5.2, code-fix): amend both FAIL attempts to check-bug (orchestrator's check had a bash syntax error and never executed); worker output audited correct and committed as-is.
+
+## gitlab-glab-loop run (2026-08-09)
+
+One misattributed row, same class as section A: the worker's output was audited correct at the orchestrator gate and committed unchanged (loop-stack-session `docs/handoffs/2026-08-09-gitlab-glab-loop-run-state.md`, wave 5).
+
+| run_id | task_key | why the check was wrong |
+|---|---|---|
+| gitlab-glab-loop-20260809T191559Z-p881946 | task-6-fix | unsatisfiable gate: the manifest check required `.scratch/*/issues` documented in loop-setup SKILL.md while the repo's own `tests/loop-setup/acceptance.sh:18` (stale since setup.sh re-added the scratch scan in afc7fbd) failed the full suite on any `scratch` substring there; attempt 2 satisfied the check's demand and was failed by the stale test. Gate audit deleted the stale test line, salvaged the worktree diff, verified all three fix sites by hand, and committed with the full suite green (36/36) |

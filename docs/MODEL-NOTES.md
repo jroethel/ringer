@@ -176,6 +176,20 @@ checks and raw logs support — no vibes, no worker self-reports.
   PASS (task-5-migrate, +203/-20 across three files with a vendoring seam into
   setup.sh). Mechanical end of the confirmed lane; no open questions, no retries.
   Running tally this run: glm-5.2 is 4/4 first-try on code-feature.
+- 2026-08-09 - gitlab-glab-loop wave 5, signal (check-bug attribution): the recorded
+  task-6-fix fail-after-retry is MISATTRIBUTED. The manifest check and a stale repo
+  test (`acceptance.sh` scratch ban, premise false since afc7fbd) formed an
+  unwinnable gate; the worker fixed all three prose sites correctly, diagnosed the
+  conflict, named the exact stale line, and recommended the right resolution. Third
+  time GLM has diagnosed a harness/gate bug unprompted from the cheap lane. Row
+  logged in AMENDMENTS-PENDING.md; work salvaged from the failed worktree and
+  committed after gate audit.
+- 2026-08-09 - gitlab-glab-loop wave 5 (claude-zai engine): docs x1, first-try PASS
+  (task-6-docs, 7 files). The opus review then failed it on two residual GitHub-only
+  prose sites and one understated root list - real substance misses on the strongest
+  posterior lane. Lesson: multi-site "fix every occurrence" prose sweeps need the
+  occurrence list enumerated in the spec, or a review layer; the keyword check alone
+  passed a 3-of-5 fix.
 
 ## opus via claude engine (`claude -p`, model `opus`)
 
