@@ -161,6 +161,12 @@ checks and raw logs support — no vibes, no worker self-reports.
   harness bug unprompted from the cheap lane. Amendment row appended to
   AMENDMENTS-PENDING.md; harness fix (executable="/bin/bash" in _run_check) staged
   for Jeremy, not applied.
+- 2026-08-09 - gitlab-glab-loop wave 1 (claude-zai engine): code-feature x2, both
+  first-try PASS under executed checks (own new suite plus the full 30-suite run
+  inside the worktree). task-1-tracker transcribed a 213-line verbatim test file and
+  a multi-branch dispatch rewrite (+303/-25) cleanly; task-2-mirrors was a small
+  case-block edit. Confirms the "tightly-specced plus executed check" lane again;
+  no signal events, no retries.
 
 ## kimi-k2.7 via opencode (`openrouter/moonshotai/kimi-k2.7-code`)
 
