@@ -190,6 +190,11 @@ checks and raw logs support — no vibes, no worker self-reports.
   posterior lane. Lesson: multi-site "fix every occurrence" prose sweeps need the
   occurrence list enumerated in the spec, or a review layer; the keyword check alone
   passed a 3-of-5 fix.
+- 2026-08-09 - gitlab-glab-loop terminal repair (claude-zai engine): code-fix x1,
+  first-try PASS (task-3-fix: dry-run remote classification plus a committed
+  regression scenario). Orchestrator re-ran the reviewer's live repro post-apply
+  and confirmed the fix independently. Final run tally for glm-5.2: 6 tasks typed,
+  6 substance-correct, one recorded FAIL amended as a check bug.
 
 ## opus via claude engine (`claude -p`, model `opus`)
 
