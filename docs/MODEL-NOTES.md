@@ -167,6 +167,11 @@ checks and raw logs support — no vibes, no worker self-reports.
   a multi-branch dispatch rewrite (+303/-25) cleanly; task-2-mirrors was a small
   case-block edit. Confirms the "tightly-specced plus executed check" lane again;
   no signal events, no retries.
+- 2026-08-09 - gitlab-glab-loop wave 2 (claude-zai engine): code-feature x1, first-try
+  PASS. task-3-setup: a 37k-char spec with eleven interacting sub-steps across five
+  files (+358/-55); worker recorded two conservative readings in report.md instead of
+  guessing wide, both correct calls. The report-your-reading discipline holds on the
+  cheap lane.
 
 ## kimi-k2.7 via opencode (`openrouter/moonshotai/kimi-k2.7-code`)
 
