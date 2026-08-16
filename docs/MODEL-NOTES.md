@@ -426,3 +426,10 @@ checks and raw logs support — no vibes, no worker self-reports.
   worker correctly attributed the one full-suite failure to a pre-existing
   repo bug and reproduced it at the base commit instead of hacking around it.
   Routed by benchmark prior (default Agent-tool execution worker); no re-route.
+
+## 2026-08-16 copywriter-skill-loop wave 1 (design-brand-pack)
+
+- glm-5.2 / claude-zai, docs (t1-vocabulary, t3-spine, t4-assumption-protocol, t5-seat-protocol): 4/4 pass on attempt 1; opus validators confirmed t1, t3, t5 with zero violations.
+- Signal, spec-bug attribution: t4's validator FAIL traced to the orchestrator's manifest expansion (a frozen block flattened into bullets), not the model; the worker reproduced its spec faithfully and the fix was applied at the gate. Do not charge glm-5.2.
+- glm-5.2 / claude-zai, code-feature (t2-checker, 517-line stdlib checker with a 20-scenario CLI self-test): attempt 1 passed its executed check but an opus validator's own probes found fail-open ledger parsing plus two spec contradictions; a relaunch with the amended spec passed and re-validated clean, including regression probes. Lesson repeated: executed checks bound what workers prove, adversarial validation catches what checks cannot; the second attempt cost one flat-rate round.
+- opus / Agent tool, code-review (5 validator dispatches): all five verdicts evidence-backed and decisive; the t2 validator's self-invented probes were the round's highest-value output.
