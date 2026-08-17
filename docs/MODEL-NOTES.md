@@ -439,3 +439,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 ## 2026-08-17 content-guides-and-form-audit loop (Agent-tool transport, not ringer)
 - sonnet / docs (wave 2, Task 1): clean pass, frozen-block insertion into a live global guide; validator confirmed verbatim. No issues.
 - sonnet / research (wave 2, Task 4): pass after one repair. Substance genuine (17-row ltv-rfm digest, no filler). Signal: needed a one-sentence-per-line repair because the task's acceptance check (t4.sh) omits the awk guard that t1/t2 carry; the adversarial validator caught it, the script did not. Check-gap attribution, not a model weakness.
+- sonnet / docs (wave 4, Task 3): clean pass, citation swap against a frozen line-to-rule map. Signal: isolation:worktree landed the branch on main not the integration branch; worker detected and reset before editing. Harness-quirk, not a model weakness; future prompts pin the base branch explicitly.
