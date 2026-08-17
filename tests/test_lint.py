@@ -288,6 +288,45 @@ class LintManifestTests(unittest.TestCase):
             f"worktrees manifest should not be flagged for expect_files: {findings}",
         )
 
+    def test_w10_owns_own_check_script(self) -> None:
+        # Worker owns verify.sh and its check runs it -> can game the check.
+        findings = lint_manifest(
+            self.manifest(
+                [self.task(check="bash verify.sh", expect_files=["output.txt", "verify.sh"])]
+            )
+        )
+        self.assertTrue(
+            any("check runs verify.sh, which the task also owns" in item for item in findings),
+            f"expected own-check-custody finding, got: {findings}",
+        )
+
+    def test_w10_owns_sibling_check_script(self) -> None:
+        # Worker "one" owns the script that verifies sibling "two".
+        findings = lint_manifest(
+            self.manifest(
+                [
+                    self.task("one", expect_files=["out1.txt", "checks/two.sh"]),
+                    self.task("two", check="bash checks/two.sh", expect_files=["out2.txt"]),
+                ],
+                max_parallel=2,
+            )
+        )
+        self.assertTrue(
+            any("owns checks/two.sh, which is two's check script" in item for item in findings),
+            f"expected sibling-check-custody finding, got: {findings}",
+        )
+
+    def test_w10_check_reading_own_deliverable_is_clean(self) -> None:
+        # `test -f`/`grep` on an owned deliverable is not the check's logic and
+        # must not false-positive.
+        findings = lint_manifest(
+            self.manifest([self.task(check="test -f output.txt", expect_files=["output.txt"])])
+        )
+        self.assertFalse(
+            any("acceptance check" in item for item in findings),
+            f"check reading its deliverable should not be flagged: {findings}",
+        )
+
     def test_compliant_manifest_is_clean(self) -> None:
         manifest = self.manifest(
             [

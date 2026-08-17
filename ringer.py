@@ -1854,6 +1854,25 @@ def lint_manifest(
                 "name one (e.g. code-feature, research, image-gen) so './ringer.py models' can guide routing."
             )
 
+    # Check custody: a worker must not own the script that verifies its work
+    # (its own or a sibling's), or it can rewrite the check to pass trivially.
+    owned = {task.key: {ownership_key(p) for p in task.expect_files if p.strip()} for task in manifest.tasks}
+    scripts = {task.key: {ownership_key(p) for p in check_script_paths(task.check)} for task in manifest.tasks}
+    for task in manifest.tasks:
+        for path in sorted(owned[task.key] & scripts[task.key]):
+            findings.append(
+                f"{task.key}: check runs {path}, which the task also owns; a worker can rewrite its own "
+                "acceptance check - move the check script outside the worker's file ownership."
+            )
+        for other in manifest.tasks:
+            if other.key == task.key:
+                continue
+            for path in sorted(owned[task.key] & scripts[other.key]):
+                findings.append(
+                    f"{task.key}: owns {path}, which is {other.key}'s check script; a worker can rewrite a "
+                    "sibling's acceptance check - move it outside all workers' file ownership."
+                )
+
     if len(manifest.tasks) >= 3 and manifest.max_parallel == 1:
         findings.append("manifest: tasks will run serially; set max_parallel.")
 
@@ -2044,6 +2063,46 @@ def strip_common_redirections(command: str) -> str:
 
 def is_relative_expect_file(path: str) -> bool:
     return bool(path.strip()) and not path.startswith("~") and not Path(path).is_absolute()
+
+
+# Interpreters whose first non-flag argument is a script file the check executes.
+SCRIPT_INTERPRETERS = {"bash", "sh", "zsh", "dash", "ksh", "python", "python3", "node", "ruby", "perl", "pytest"}
+
+
+def ownership_key(path: str) -> str:
+    """Normalize a path so an owned file and a check reference compare equal."""
+    return os.path.normpath(os.path.expanduser(path.strip()))
+
+
+def check_script_paths(check: str) -> set[str]:
+    """Paths of script files the check *executes* (its acceptance logic).
+
+    Custody is about the check's own logic, not the deliverable it reads:
+    `test -f out.md` references a file the worker owns and is fine, but
+    `bash verify.sh` runs a script that -- if the worker owns it -- the
+    worker can rewrite to pass trivially. Only executed scripts are returned.
+    """
+    scripts: set[str] = set()
+    for part in command_parts(strip_shell_comments(check)):
+        try:
+            tokens = shlex.split(part)
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+        cmd = tokens[0]
+        if os.path.basename(cmd) in SCRIPT_INTERPRETERS:
+            for tok in tokens[1:]:
+                if tok in {"-c", "-m"}:  # inline code / module, no script file
+                    break
+                if tok.startswith("-"):
+                    continue
+                scripts.add(tok)
+                break
+        elif cmd.startswith("./") or cmd.startswith("~") or "/" in cmd:
+            # Direct execution of a script by path (./verify.sh, /abs/run, dir/x).
+            scripts.add(cmd)
+    return scripts
 
 
 def instructs_git_commit(spec: str) -> bool:
