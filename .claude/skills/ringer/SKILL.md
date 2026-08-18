@@ -172,6 +172,23 @@ the check's failure output.
   case-insensitive and flexible matching for structure, and reserve hard
   failure for substance: missing evidence, fabricated content, code that
   doesn't run.
+- **A check must be satisfiable by a worker obeying the spec.** Read the
+  check against the spec's boundary before running: a check that asserts a
+  repo state the ownership list forbids the worker from creating (e.g. a
+  repo-wide "zero references" grep while historical docs are off-limits)
+  burns every attempt against an unwinnable gate (stm-nav lesson, 2026-07-17).
+- **Negative assertions only over files the task owns, structure over prose.**
+  Repo-wide negative greps count history as failure; a negative phrase-grep
+  cannot tell leftover content from the requested reference to the moved
+  content. Assert absence only in owned files; match markup or parsed state,
+  not sentences (stm-nav lesson).
+- **State invariants with their exceptions.** A "byte-identical rebuild"
+  check when the plan says "except timestamps" pushes workers to widen scope
+  to satisfy the stricter gate; carry the exception into the check
+  (`git diff -I`, field excludes) instead (stm-nav lesson).
+- **Validator specs need verdict discipline.** Tell review/validator tasks
+  "if any criterion fails, the overall verdict is fail" — otherwise first
+  attempts write pass while their own notes contradict it (stm-nav lesson).
 
 ## Pattern playbook
 
