@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_AUTHORS = {
     "jonathan edwards",
     "nate jones",
+    "jeremy roethel",
     "github",
 }
 EXCLUDED_AUTHOR_PREFIXES = ("claude",)

@@ -1854,6 +1854,25 @@ def lint_manifest(
                 "name one (e.g. code-feature, research, image-gen) so './ringer.py models' can guide routing."
             )
 
+    # Check custody: a worker must not own the script that verifies its work
+    # (its own or a sibling's), or it can rewrite the check to pass trivially.
+    owned = {task.key: {ownership_key(p) for p in task.expect_files if p.strip()} for task in manifest.tasks}
+    scripts = {task.key: {ownership_key(p) for p in check_script_paths(task.check)} for task in manifest.tasks}
+    for task in manifest.tasks:
+        for path in sorted(owned[task.key] & scripts[task.key]):
+            findings.append(
+                f"{task.key}: check runs {path}, which the task also owns; a worker can rewrite its own "
+                "acceptance check - move the check script outside the worker's file ownership."
+            )
+        for other in manifest.tasks:
+            if other.key == task.key:
+                continue
+            for path in sorted(owned[task.key] & scripts[other.key]):
+                findings.append(
+                    f"{task.key}: owns {path}, which is {other.key}'s check script; a worker can rewrite a "
+                    "sibling's acceptance check - move it outside all workers' file ownership."
+                )
+
     if len(manifest.tasks) >= 3 and manifest.max_parallel == 1:
         findings.append("manifest: tasks will run serially; set max_parallel.")
 
@@ -2044,6 +2063,46 @@ def strip_common_redirections(command: str) -> str:
 
 def is_relative_expect_file(path: str) -> bool:
     return bool(path.strip()) and not path.startswith("~") and not Path(path).is_absolute()
+
+
+# Interpreters whose first non-flag argument is a script file the check executes.
+SCRIPT_INTERPRETERS = {"bash", "sh", "zsh", "dash", "ksh", "python", "python3", "node", "ruby", "perl", "pytest"}
+
+
+def ownership_key(path: str) -> str:
+    """Normalize a path so an owned file and a check reference compare equal."""
+    return os.path.normpath(os.path.expanduser(path.strip()))
+
+
+def check_script_paths(check: str) -> set[str]:
+    """Paths of script files the check *executes* (its acceptance logic).
+
+    Custody is about the check's own logic, not the deliverable it reads:
+    `test -f out.md` references a file the worker owns and is fine, but
+    `bash verify.sh` runs a script that -- if the worker owns it -- the
+    worker can rewrite to pass trivially. Only executed scripts are returned.
+    """
+    scripts: set[str] = set()
+    for part in command_parts(strip_shell_comments(check)):
+        try:
+            tokens = shlex.split(part)
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+        cmd = tokens[0]
+        if os.path.basename(cmd) in SCRIPT_INTERPRETERS:
+            for tok in tokens[1:]:
+                if tok in {"-c", "-m"}:  # inline code / module, no script file
+                    break
+                if tok.startswith("-"):
+                    continue
+                scripts.add(tok)
+                break
+        elif cmd.startswith("./") or cmd.startswith("~") or "/" in cmd:
+            # Direct execution of a script by path (./verify.sh, /abs/run, dir/x).
+            scripts.add(cmd)
+    return scripts
 
 
 def instructs_git_commit(spec: str) -> bool:
@@ -5244,19 +5303,21 @@ def inject_models_tab_into_ringside_html(html: str) -> str:
             `<td class="numeric">${numberOrZeroLocal(row.tasks).toLocaleString()}</td>`,
             `<td class="numeric">${html(percent(row.first_try_pass_rate))}</td>`,
             `<td class="numeric">${html(percent(row.pass_rate))}</td>`,
+            `<td class="numeric">${numberOrZeroLocal(row.amended).toLocaleString()}</td>`,
             `<td class="numeric">${row.median_tokens === null || row.median_tokens === undefined ? "" : numberOrZeroLocal(row.median_tokens).toLocaleString()}</td>`,
             `<td>${html(modelDuration(row.median_duration_ms))}</td>`,
             `<td>${html(modelDate(row.last_seen))}</td>`,
             `<td class="model-notes" title="${html(notes)}">${html(row.latest_note || "")}</td>`,
             '</tr>',
           );
-          if (expanded) body.push(`<tr class="model-breakdown"><td colspan="12">${breakdown(bucketId)}</td></tr>`);
+          if (expanded) body.push(`<tr class="model-breakdown"><td colspan="13">${breakdown(bucketId)}</td></tr>`);
         });
         wrap.innerHTML = [
           '<table class="models-table">',
           '<thead><tr>',
           '<th>Model</th><th>Lab</th><th>Harness</th><th>API/Plan</th><th>Tier</th>',
           '<th class="numeric">Tasks</th><th class="numeric">First try</th><th class="numeric">Pass</th>',
+          '<th class="numeric">Amended</th>',
           '<th class="numeric">Tokens (median)</th><th>Speed (median)</th><th>Last used</th><th>Notes</th>',
           '</tr></thead>',
           `<tbody>${body.join("")}</tbody>`,
@@ -5990,8 +6051,12 @@ def read_model_log_rows(
             if not isinstance(row, dict):
                 skipped += 1
                 continue
-            if engine is not None and model_log_text(row.get("worker_engine")) != engine:
-                continue
+            if (
+                engine is not None
+                and row.get("type") != "amendment"
+                and model_log_text(row.get("worker_engine")) != engine
+            ):
+                continue  # keep amendment rows regardless of engine filter (F7 passthrough)
             rows.append(row)
     if since is not None:
         selected_row_ids: set[int] = set()
@@ -6010,6 +6075,29 @@ def read_model_log_rows(
     return rows, skipped
 
 
+def partition_amendments(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[tuple[str, str]], dict[tuple[str, str], list[str]]]:
+    """Split rows into real attempts, the voided (run_id, task_key) set, and per-task notes.
+
+    An amendment row carries no model/task_type, so if it is left in the grouping input it
+    self-groups into a phantom empty-model (untyped) FAIL task (finding F4); aggregators must
+    group the returned ``attempts`` list, never the raw rows.
+    """
+    attempts: list[dict[str, Any]] = []
+    voided: set[tuple[str, str]] = set()
+    notes_by_task: dict[tuple[str, str], list[str]] = {}
+    for row in rows:
+        if row.get("type") == "amendment":
+            if row.get("reclassify") == "check_bug":
+                key = (row.get("run_id"), row.get("task_key"))
+                voided.add(key)
+                notes_by_task.setdefault(key, []).append(model_log_text(row.get("note")))
+            continue
+        attempts.append(row)
+    return attempts, voided, notes_by_task
+
+
 def aggregate_model_log_rows(
     rows: list[dict[str, Any]],
     *,
@@ -6017,8 +6105,9 @@ def aggregate_model_log_rows(
     model: str | None = None,
 ) -> list[dict[str, Any]]:
     groups: dict[tuple[str, str, str, str, bool], dict[str, Any]] = {}
-    effort_keys = model_reasoning_effort_keys(rows)
-    for task_rows in group_model_log_tasks(rows):
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    effort_keys = model_reasoning_effort_keys(attempts)
+    for task_rows in group_model_log_tasks(attempts):
         ordered = sorted(
             task_rows,
             key=lambda row: (
@@ -6066,11 +6155,18 @@ def aggregate_model_log_rows(
                 "median_duration_ms": None,
                 "median_tokens": None,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
                 "_first_try_passed": 0,
                 "_duration_ms": [],
                 "_tokens": [],
             },
         )
+        void_key = (first.get("run_id"), first.get("task_key"))
+        if void_key in voided:
+            group["amended"] += 1
+            group["amendments"].extend(notes_by_task.get(void_key, []))
+            continue  # voided: evidence-void, drop from tasks / passed / first-try
         group["tasks"] += 1
         group["attempts"] += len(ordered)
         if model_log_text(final.get("verdict")).upper() == "PASS":
@@ -6093,6 +6189,8 @@ def aggregate_model_log_rows(
     finalized: list[dict[str, Any]] = []
     for group in groups.values():
         tasks_count = group["tasks"]
+        if tasks_count == 0:
+            continue  # every task in this group was voided (F6): no misleading 0% row
         group["pass_rate"] = group["passed"] / tasks_count if tasks_count else 0.0
         group["first_try_pass_rate"] = (
             group["_first_try_passed"] / tasks_count if tasks_count else 0.0
@@ -6116,6 +6214,8 @@ def aggregate_model_log_rows(
                 "median_duration_ms": group["median_duration_ms"],
                 "median_tokens": group["median_tokens"],
                 "last_seen": group["last_seen"],
+                "amended": group["amended"],
+                "amendments": group["amendments"],
             }
         )
     return sorted(
@@ -6143,6 +6243,7 @@ MODEL_SCOREBOARD_COLUMNS = (
     "Tasks",
     "First try",
     "Pass",
+    "Amended",
     "Tokens (median)",
     "Speed (median)",
     "Last used",
@@ -6162,12 +6263,27 @@ def default_read_model_db_path() -> Path:
     return ringer_home() / "ringer.db"
 
 
+def log_has_amendments(path: Path) -> bool:
+    # ponytail: line-scan the whole log; when amendments exist, models skips the DB fast-path and
+    # reads the full JSONL. Fine at current log sizes (hundreds of rows); revisit if the log grows huge.
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                if '"type": "amendment"' in line:
+                    return True
+    except FileNotFoundError:
+        return False
+    return False
+
+
 def should_use_read_model_db(
     *,
     log_path: Path,
     default_log_path: Path,
     explicit_db: bool,
 ) -> bool:
+    if log_has_amendments(log_path):
+        return False
     if explicit_db:
         return True
     return log_path.expanduser().resolve() == default_log_path.expanduser().resolve()
@@ -6746,6 +6862,8 @@ def read_catalog_events_from_offset(path: Path, offset: int) -> tuple[list[dict[
 def insert_attempt_rows(conn: Any, rows: list[dict[str, Any]]) -> int:
     payloads: list[tuple[Any, ...]] = []
     for row in rows:
+        if row.get("type") == "amendment":
+            continue  # amendments carry no attempt fields; keep the read-model free of phantoms (F1)
         payloads.append(
             (
                 model_log_text(row.get("run_id")),
@@ -7303,7 +7421,8 @@ def enrich_model_groups_with_notes(
                 reverse=True,
             )
         ]
-        item["notes"] = notes
+        amendment_notes = [f"amended: {note}" for note in (group.get("amendments") or [])]
+        item["notes"] = notes + amendment_notes
         item["latest_note"] = strip_inline_markdown(notes[0]) if notes else ""
         enriched.append(item)
     return enriched
@@ -7446,8 +7565,9 @@ def aggregate_model_scoreboard_rows(
     model: str | None = None,
 ) -> list[dict[str, Any]]:
     models: dict[tuple[str, str, str, bool], dict[str, Any]] = {}
-    effort_keys = model_reasoning_effort_keys(rows)
-    for task_rows in group_model_log_tasks(rows):
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    effort_keys = model_reasoning_effort_keys(attempts)
+    for task_rows in group_model_log_tasks(attempts):
         ordered = sorted(
             task_rows,
             key=lambda row: (
@@ -7486,6 +7606,8 @@ def aggregate_model_scoreboard_rows(
                 "retries": 0,
                 "first_try_passed": 0,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
                 "_duration_ms": [],
                 "_tokens": [],
                 "_task_types": {},
@@ -7501,8 +7623,17 @@ def aggregate_model_scoreboard_rows(
                 "failed": 0,
                 "first_try_passed": 0,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
             },
         )
+        void_key = (first.get("run_id"), first.get("task_key"))
+        if void_key in voided:
+            notes = notes_by_task.get(void_key, [])
+            for target in (model_entry, breakdown):
+                target["amended"] += 1
+                target["amendments"].extend(notes)
+            continue  # voided: evidence-void, drop from tasks / passed / first-try / retries
         passed = model_log_text(final.get("verdict")).upper() == "PASS"
         first_passed = model_log_text(first.get("verdict")).upper() == "PASS"
         for target in (model_entry, breakdown):
@@ -7526,9 +7657,13 @@ def aggregate_model_scoreboard_rows(
     finalized: list[dict[str, Any]] = []
     for entry in models.values():
         tasks_count = int(entry["tasks"])
+        if tasks_count == 0:
+            continue  # every task under this model was voided (F6): no misleading 0% row
         breakdown_rows = []
         for breakdown in entry["_task_types"].values():
             b_tasks = int(breakdown["tasks"])
+            if b_tasks == 0:
+                continue  # every task of this type was voided: drop the empty breakdown row
             breakdown_rows.append(
                 {
                     "task_type": breakdown["task_type"],
@@ -7539,6 +7674,8 @@ def aggregate_model_scoreboard_rows(
                     "first_try_pass_rate": breakdown["first_try_passed"] / b_tasks if b_tasks else 0.0,
                     "pass_rate": breakdown["passed"] / b_tasks if b_tasks else 0.0,
                     "last_seen": breakdown["last_seen"],
+                    "amended": breakdown["amended"],
+                    "amendments": breakdown["amendments"],
                 }
             )
         breakdown_rows.sort(key=lambda item: (-item["tasks"], item["task_type"]))
@@ -7566,6 +7703,8 @@ def aggregate_model_scoreboard_rows(
                 "median_duration_ms": median_int(entry["_duration_ms"]),
                 "median_tokens": median_int(entry["_tokens"]),
                 "last_seen": entry["last_seen"],
+                "amended": entry["amended"],
+                "amendments": entry["amendments"],
                 "task_types": breakdown_rows,
             }
         )
@@ -8192,13 +8331,14 @@ def render_model_table_pair(
       <td class="num">{fmt_int(row.get("tasks"))}</td>
       <td class="num rate-cell">{rate_cell_html(row.get("first_try_pass_rate"))}</td>
       <td class="num rate-cell">{rate_cell_html(row.get("pass_rate"))}</td>
+      <td class="num">{fmt_int(row.get("amended", 0))}</td>
       <td class="num">{html_escape(fmt_int(row.get("median_tokens"))) if row.get("median_tokens") is not None else ""}</td>
       <td>{html_escape(fmt_scoreboard_duration(row.get("median_duration_ms")))}</td>
       <td>{html_escape(humanized_log_date(row.get("last_seen")))}</td>
       <td class="notes-cell" title="{html_escape(notes_title)}">{html_escape(latest_note)}</td>
     </tr>
     <tr class="detail-row">
-      <td colspan="12">
+      <td colspan="13">
         <details class="model-detail">
           <summary>details for {html_escape(model_display)}</summary>
           <div class="detail-content">
@@ -8247,7 +8387,7 @@ def render_model_scoreboard_html(
         )
     table_rows = "".join(rendered_rows)
     if not table_rows:
-        table_rows = '<tr><td colspan="12" class="muted">No local model evidence matched these filters.</td></tr>'
+        table_rows = '<tr><td colspan="13" class="muted">No local model evidence matched these filters.</td></tr>'
     unregistered_slugs = sorted(
         {str(row.get("model") or "") for row in ordered if row.get("unregistered") and row.get("model")}
     )
@@ -8307,6 +8447,7 @@ def render_model_scoreboard_html(
             <th class="num">Tasks</th>
             <th class="num">First try</th>
             <th class="num">Pass</th>
+            <th class="num">Amended</th>
             <th class="num">Tokens (median)</th>
             <th>Speed (median)</th>
             <th>Last used</th>
@@ -8371,7 +8512,7 @@ def write_model_scoreboard_html(
 
 def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list[dict[str, Any]]) -> None:
     print(f"Model log: {path} ({rows_read} rows, {skipped} skipped lines)")
-    widths = (32, 20, 18, 18, 10, 7, 10, 7, 15, 14, 14, 60)
+    widths = (32, 20, 18, 18, 10, 7, 10, 7, 8, 15, 14, 14, 60)
     header = " | ".join(
         f"{name:<{width}}" for name, width in zip(MODEL_SCOREBOARD_COLUMNS, widths)
     )
@@ -8404,6 +8545,7 @@ def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list
             fmt_int(group.get("tasks")),
             fmt_percent(group.get("first_try_pass_rate")),
             fmt_percent(group.get("pass_rate")),
+            fmt_int(group.get("amended", 0)),
             "" if group.get("median_tokens") is None else fmt_int(group.get("median_tokens")),
             fmt_scoreboard_duration(group.get("median_duration_ms")),
             humanized_log_date(group.get("last_seen")),
@@ -8602,6 +8744,93 @@ def run_models_command(config: AppConfig, args: argparse.Namespace) -> int:
         print(json.dumps(groups))
     else:
         print_model_log_table(log_path, len(rows), skipped, groups)
+    return 0
+
+
+def append_amendment(
+    path: Path,
+    run_id: str,
+    task_key: str,
+    reclassify: str,
+    note: str,
+    identity: str,
+    *,
+    now: str | None = None,
+) -> bool:
+    rows, _skipped = read_model_log_rows(path)
+    for row in rows:
+        if (
+            row.get("type") == "amendment"
+            and row.get("run_id") == run_id
+            and row.get("task_key") == task_key
+            and row.get("reclassify") == reclassify
+        ):
+            return False
+    ts = now or utc_now_iso()
+    amendment = {
+        "type": "amendment",
+        "run_id": run_id,
+        "task_key": task_key,
+        "reclassify": reclassify,
+        "note": note,
+        "amended_at": ts,
+        "identity": identity,
+        "logged_at": ts,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(amendment, sort_keys=True) + "\n")
+    return True
+
+
+def run_amend_command(config: AppConfig, args: argparse.Namespace) -> int:
+    log_path = (args.log or config.eval.jsonl_path.expanduser().resolve()).expanduser().resolve()
+    identity = resolve_identity(args.identity, config, [])
+    rows, _skipped = read_model_log_rows(log_path)
+    has_matching_attempt = any(
+        row.get("type") != "amendment"
+        and row.get("run_id") == args.run_id
+        and row.get("task_key") == args.task_key
+        for row in rows
+    )
+    if not has_matching_attempt:
+        print(f"warning: no recorded attempt matches {args.run_id} {args.task_key} - amending anyway (append-only)")
+    appended = append_amendment(log_path, args.run_id, args.task_key, args.reclassify, args.note, identity)
+    if appended:
+        print(f"amended {args.run_id} {args.task_key} as {args.reclassify}")
+    else:
+        print(f"no-op: {args.run_id} {args.task_key} already amended as {args.reclassify}")
+    return 0
+
+
+def triage_run(rows: list[dict[str, Any]], run_id: str) -> list[dict[str, Any]]:
+    """Read-only: FAIL/ERROR/TIMEOUT attempts for one run, with any amendment inline."""
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    report: list[dict[str, Any]] = []
+    for row in attempts:
+        if row.get("run_id") != run_id or model_log_text(row.get("verdict")).upper() == "PASS":
+            continue
+        task_key = row.get("task_key")
+        key = (run_id, task_key)
+        report.append(
+            {
+                "task_key": task_key,
+                "verdict": row.get("verdict"),
+                "check_excerpt": model_log_text(row.get("notes")).strip(),
+                "amended": key in voided,
+                "amendment_note": ", ".join(notes_by_task.get(key, [])),
+            }
+        )
+    return report
+
+
+def run_triage_command(config: AppConfig, args: argparse.Namespace) -> int:
+    log_path = (args.log or config.eval.jsonl_path.expanduser().resolve()).expanduser().resolve()
+    rows, _skipped = read_model_log_rows(log_path)
+    report = triage_run(rows, args.run_id)
+    for entry in report:
+        marker = "[amended]" if entry["amended"] else "[unresolved]"
+        print(f"{entry['task_key']} {entry['verdict']} {marker} {entry['check_excerpt']}")
     return 0
 
 
@@ -10962,6 +11191,18 @@ def build_parser() -> argparse.ArgumentParser:
     models_parser.add_argument("--open", action="store_true", help="render the HTML scoreboard to the artifact library and open it")
     models_parser.add_argument("--json", action="store_true", help="print the scoreboard as JSON")
 
+    amend_parser = subparsers.add_parser("amend", help="append a check-bug reclassification to the eval log")
+    amend_parser.add_argument("run_id")
+    amend_parser.add_argument("task_key")
+    amend_parser.add_argument("--reclassify", choices=["check_bug"], required=True)
+    amend_parser.add_argument("--note", required=True, help="why the check was wrong (mandatory audit trail)")
+    amend_parser.add_argument("--identity", help="who is amending; falls through resolve_identity() if omitted")
+    amend_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
+
+    triage_parser = subparsers.add_parser("triage", help="list a run's FAIL attempts with check context, for audit")
+    triage_parser.add_argument("run_id")
+    triage_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
+
     catalog_parser = subparsers.add_parser("catalog", help="show or refresh the local OpenRouter model catalog")
     catalog_parser.add_argument("--refresh", action="store_true", help="fetch source and rewrite the local snapshot")
     catalog_parser.add_argument("--source", help=f"OpenRouter models URL or fixture file (default: {DEFAULT_CATALOG_SOURCE})")
@@ -11057,6 +11298,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_db_command(config, args)
         if args.command == "models":
             return run_models_command(config, args)
+        if args.command == "amend":
+            return run_amend_command(config, args)
+        if args.command == "triage":
+            return run_triage_command(config, args)
         if args.command == "hud":
             return run_persistent_hud(
                 config,
