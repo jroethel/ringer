@@ -8664,6 +8664,62 @@ def run_models_command(config: AppConfig, args: argparse.Namespace) -> int:
     return 0
 
 
+def append_amendment(
+    path: Path,
+    run_id: str,
+    task_key: str,
+    reclassify: str,
+    note: str,
+    identity: str,
+    *,
+    now: str | None = None,
+) -> bool:
+    rows, _skipped = read_model_log_rows(path)
+    for row in rows:
+        if (
+            row.get("type") == "amendment"
+            and row.get("run_id") == run_id
+            and row.get("task_key") == task_key
+            and row.get("reclassify") == reclassify
+        ):
+            return False
+    ts = now or utc_now_iso()
+    amendment = {
+        "type": "amendment",
+        "run_id": run_id,
+        "task_key": task_key,
+        "reclassify": reclassify,
+        "note": note,
+        "amended_at": ts,
+        "identity": identity,
+        "logged_at": ts,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(amendment, sort_keys=True) + "\n")
+    return True
+
+
+def run_amend_command(config: AppConfig, args: argparse.Namespace) -> int:
+    log_path = (args.log or config.eval.jsonl_path.expanduser().resolve()).expanduser().resolve()
+    identity = resolve_identity(args.identity, config, [])
+    rows, _skipped = read_model_log_rows(log_path)
+    has_matching_attempt = any(
+        row.get("type") != "amendment"
+        and row.get("run_id") == args.run_id
+        and row.get("task_key") == args.task_key
+        for row in rows
+    )
+    if not has_matching_attempt:
+        print(f"warning: no recorded attempt matches {args.run_id} {args.task_key} - amending anyway (append-only)")
+    appended = append_amendment(log_path, args.run_id, args.task_key, args.reclassify, args.note, identity)
+    if appended:
+        print(f"amended {args.run_id} {args.task_key} as {args.reclassify}")
+    else:
+        print(f"no-op: {args.run_id} {args.task_key} already amended as {args.reclassify}")
+    return 0
+
+
 class Verifier:
     async def verify(self, task: TaskSpec, taskdir: Path) -> VerifyResult:
         check_returncode, check_timed_out, output = await self._run_check(task.check, taskdir)
@@ -11021,6 +11077,14 @@ def build_parser() -> argparse.ArgumentParser:
     models_parser.add_argument("--open", action="store_true", help="render the HTML scoreboard to the artifact library and open it")
     models_parser.add_argument("--json", action="store_true", help="print the scoreboard as JSON")
 
+    amend_parser = subparsers.add_parser("amend", help="append a check-bug reclassification to the eval log")
+    amend_parser.add_argument("run_id")
+    amend_parser.add_argument("task_key")
+    amend_parser.add_argument("--reclassify", choices=["check_bug"], required=True)
+    amend_parser.add_argument("--note", required=True, help="why the check was wrong (mandatory audit trail)")
+    amend_parser.add_argument("--identity", help="who is amending; falls through resolve_identity() if omitted")
+    amend_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
+
     catalog_parser = subparsers.add_parser("catalog", help="show or refresh the local OpenRouter model catalog")
     catalog_parser.add_argument("--refresh", action="store_true", help="fetch source and rewrite the local snapshot")
     catalog_parser.add_argument("--source", help=f"OpenRouter models URL or fixture file (default: {DEFAULT_CATALOG_SOURCE})")
@@ -11116,6 +11180,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_db_command(config, args)
         if args.command == "models":
             return run_models_command(config, args)
+        if args.command == "amend":
+            return run_amend_command(config, args)
         if args.command == "hud":
             return run_persistent_hud(
                 config,
