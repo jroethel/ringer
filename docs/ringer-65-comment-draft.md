@@ -11,4 +11,10 @@ What shipped in this pass:
 - `check_bug` as the only accepted `reclassify` value today, with the schema left open for the human-rejection direction and any future kind.
 - The `amended` count surfaced on the `models` table and HTML page, plus a read-only `triage` view that shows each amendment inline next to the FAIL it corrects, so the per-run report knows better too - your fourth note.
 
+Why this stopped being a nice-to-have for us: my loop stack now routes every unit of work off the scoreboard as its single evidence source, which makes amendments the integrity layer of the whole routing system. A check bug left unamended is not one bad log line - it silently mis-routes every future unit of that task_type, because the check's exit code is the only verdict ringer records and `first_try_pass_rate` drives the promotion ladder. The run that surfaced this recorded 8 diagnosed FAILs: 7 were orchestrator check bugs, not model failures, every one with worker output audited correct at the gate and committed unchanged, and the 8th stayed a genuine model signal. Per-row rationale is in `docs/AMENDMENTS-PENDING.md` and the patch design in `docs/AMENDMENT-ROWS.md` on my fork.
+
+It also lands where Nate already pointed:
+
+> "When a check fails a worker, sometimes the check is wrong, so build in the post-mortem that can rule for the accused. Without one, your verification layer calcifies into bureaucracy people learn to game."
+
 Net effect: an audited misattribution can now be voided after the fact, and the promotion math (`first_try_pass_rate` against `PROVEN_MIN_FIRST_TRY`) finally hears about it. The non-goal holds - attribution stays human-driven, the command trusts its caller and requires the note for the audit trail. Would welcome a look at the general schema against your fork's `mark --check-fault` shape.
