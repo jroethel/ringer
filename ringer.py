@@ -5303,19 +5303,21 @@ def inject_models_tab_into_ringside_html(html: str) -> str:
             `<td class="numeric">${numberOrZeroLocal(row.tasks).toLocaleString()}</td>`,
             `<td class="numeric">${html(percent(row.first_try_pass_rate))}</td>`,
             `<td class="numeric">${html(percent(row.pass_rate))}</td>`,
+            `<td class="numeric">${numberOrZeroLocal(row.amended).toLocaleString()}</td>`,
             `<td class="numeric">${row.median_tokens === null || row.median_tokens === undefined ? "" : numberOrZeroLocal(row.median_tokens).toLocaleString()}</td>`,
             `<td>${html(modelDuration(row.median_duration_ms))}</td>`,
             `<td>${html(modelDate(row.last_seen))}</td>`,
             `<td class="model-notes" title="${html(notes)}">${html(row.latest_note || "")}</td>`,
             '</tr>',
           );
-          if (expanded) body.push(`<tr class="model-breakdown"><td colspan="12">${breakdown(bucketId)}</td></tr>`);
+          if (expanded) body.push(`<tr class="model-breakdown"><td colspan="13">${breakdown(bucketId)}</td></tr>`);
         });
         wrap.innerHTML = [
           '<table class="models-table">',
           '<thead><tr>',
           '<th>Model</th><th>Lab</th><th>Harness</th><th>API/Plan</th><th>Tier</th>',
           '<th class="numeric">Tasks</th><th class="numeric">First try</th><th class="numeric">Pass</th>',
+          '<th class="numeric">Amended</th>',
           '<th class="numeric">Tokens (median)</th><th>Speed (median)</th><th>Last used</th><th>Notes</th>',
           '</tr></thead>',
           `<tbody>${body.join("")}</tbody>`,
@@ -6241,6 +6243,7 @@ MODEL_SCOREBOARD_COLUMNS = (
     "Tasks",
     "First try",
     "Pass",
+    "Amended",
     "Tokens (median)",
     "Speed (median)",
     "Last used",
@@ -7418,7 +7421,8 @@ def enrich_model_groups_with_notes(
                 reverse=True,
             )
         ]
-        item["notes"] = notes
+        amendment_notes = [f"amended: {note}" for note in (group.get("amendments") or [])]
+        item["notes"] = notes + amendment_notes
         item["latest_note"] = strip_inline_markdown(notes[0]) if notes else ""
         enriched.append(item)
     return enriched
@@ -8327,13 +8331,14 @@ def render_model_table_pair(
       <td class="num">{fmt_int(row.get("tasks"))}</td>
       <td class="num rate-cell">{rate_cell_html(row.get("first_try_pass_rate"))}</td>
       <td class="num rate-cell">{rate_cell_html(row.get("pass_rate"))}</td>
+      <td class="num">{fmt_int(row.get("amended", 0))}</td>
       <td class="num">{html_escape(fmt_int(row.get("median_tokens"))) if row.get("median_tokens") is not None else ""}</td>
       <td>{html_escape(fmt_scoreboard_duration(row.get("median_duration_ms")))}</td>
       <td>{html_escape(humanized_log_date(row.get("last_seen")))}</td>
       <td class="notes-cell" title="{html_escape(notes_title)}">{html_escape(latest_note)}</td>
     </tr>
     <tr class="detail-row">
-      <td colspan="12">
+      <td colspan="13">
         <details class="model-detail">
           <summary>details for {html_escape(model_display)}</summary>
           <div class="detail-content">
@@ -8382,7 +8387,7 @@ def render_model_scoreboard_html(
         )
     table_rows = "".join(rendered_rows)
     if not table_rows:
-        table_rows = '<tr><td colspan="12" class="muted">No local model evidence matched these filters.</td></tr>'
+        table_rows = '<tr><td colspan="13" class="muted">No local model evidence matched these filters.</td></tr>'
     unregistered_slugs = sorted(
         {str(row.get("model") or "") for row in ordered if row.get("unregistered") and row.get("model")}
     )
@@ -8442,6 +8447,7 @@ def render_model_scoreboard_html(
             <th class="num">Tasks</th>
             <th class="num">First try</th>
             <th class="num">Pass</th>
+            <th class="num">Amended</th>
             <th class="num">Tokens (median)</th>
             <th>Speed (median)</th>
             <th>Last used</th>
@@ -8506,7 +8512,7 @@ def write_model_scoreboard_html(
 
 def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list[dict[str, Any]]) -> None:
     print(f"Model log: {path} ({rows_read} rows, {skipped} skipped lines)")
-    widths = (32, 20, 18, 18, 10, 7, 10, 7, 15, 14, 14, 60)
+    widths = (32, 20, 18, 18, 10, 7, 10, 7, 8, 15, 14, 14, 60)
     header = " | ".join(
         f"{name:<{width}}" for name, width in zip(MODEL_SCOREBOARD_COLUMNS, widths)
     )
@@ -8539,6 +8545,7 @@ def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list
             fmt_int(group.get("tasks")),
             fmt_percent(group.get("first_try_pass_rate")),
             fmt_percent(group.get("pass_rate")),
+            fmt_int(group.get("amended", 0)),
             "" if group.get("median_tokens") is None else fmt_int(group.get("median_tokens")),
             fmt_scoreboard_duration(group.get("median_duration_ms")),
             humanized_log_date(group.get("last_seen")),
