@@ -6049,8 +6049,12 @@ def read_model_log_rows(
             if not isinstance(row, dict):
                 skipped += 1
                 continue
-            if engine is not None and model_log_text(row.get("worker_engine")) != engine:
-                continue
+            if (
+                engine is not None
+                and row.get("type") != "amendment"
+                and model_log_text(row.get("worker_engine")) != engine
+            ):
+                continue  # keep amendment rows regardless of engine filter (F7 passthrough)
             rows.append(row)
     if since is not None:
         selected_row_ids: set[int] = set()
@@ -6069,6 +6073,29 @@ def read_model_log_rows(
     return rows, skipped
 
 
+def partition_amendments(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[tuple[str, str]], dict[tuple[str, str], list[str]]]:
+    """Split rows into real attempts, the voided (run_id, task_key) set, and per-task notes.
+
+    An amendment row carries no model/task_type, so if it is left in the grouping input it
+    self-groups into a phantom empty-model (untyped) FAIL task (finding F4); aggregators must
+    group the returned ``attempts`` list, never the raw rows.
+    """
+    attempts: list[dict[str, Any]] = []
+    voided: set[tuple[str, str]] = set()
+    notes_by_task: dict[tuple[str, str], list[str]] = {}
+    for row in rows:
+        if row.get("type") == "amendment":
+            if row.get("reclassify") == "check_bug":
+                key = (row.get("run_id"), row.get("task_key"))
+                voided.add(key)
+                notes_by_task.setdefault(key, []).append(model_log_text(row.get("note")))
+            continue
+        attempts.append(row)
+    return attempts, voided, notes_by_task
+
+
 def aggregate_model_log_rows(
     rows: list[dict[str, Any]],
     *,
@@ -6076,8 +6103,9 @@ def aggregate_model_log_rows(
     model: str | None = None,
 ) -> list[dict[str, Any]]:
     groups: dict[tuple[str, str, str, str, bool], dict[str, Any]] = {}
-    effort_keys = model_reasoning_effort_keys(rows)
-    for task_rows in group_model_log_tasks(rows):
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    effort_keys = model_reasoning_effort_keys(attempts)
+    for task_rows in group_model_log_tasks(attempts):
         ordered = sorted(
             task_rows,
             key=lambda row: (
@@ -6125,11 +6153,18 @@ def aggregate_model_log_rows(
                 "median_duration_ms": None,
                 "median_tokens": None,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
                 "_first_try_passed": 0,
                 "_duration_ms": [],
                 "_tokens": [],
             },
         )
+        void_key = (first.get("run_id"), first.get("task_key"))
+        if void_key in voided:
+            group["amended"] += 1
+            group["amendments"].extend(notes_by_task.get(void_key, []))
+            continue  # voided: evidence-void, drop from tasks / passed / first-try
         group["tasks"] += 1
         group["attempts"] += len(ordered)
         if model_log_text(final.get("verdict")).upper() == "PASS":
@@ -6152,6 +6187,8 @@ def aggregate_model_log_rows(
     finalized: list[dict[str, Any]] = []
     for group in groups.values():
         tasks_count = group["tasks"]
+        if tasks_count == 0:
+            continue  # every task in this group was voided (F6): no misleading 0% row
         group["pass_rate"] = group["passed"] / tasks_count if tasks_count else 0.0
         group["first_try_pass_rate"] = (
             group["_first_try_passed"] / tasks_count if tasks_count else 0.0
@@ -6175,6 +6212,8 @@ def aggregate_model_log_rows(
                 "median_duration_ms": group["median_duration_ms"],
                 "median_tokens": group["median_tokens"],
                 "last_seen": group["last_seen"],
+                "amended": group["amended"],
+                "amendments": group["amendments"],
             }
         )
     return sorted(
@@ -7505,8 +7544,9 @@ def aggregate_model_scoreboard_rows(
     model: str | None = None,
 ) -> list[dict[str, Any]]:
     models: dict[tuple[str, str, str, bool], dict[str, Any]] = {}
-    effort_keys = model_reasoning_effort_keys(rows)
-    for task_rows in group_model_log_tasks(rows):
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    effort_keys = model_reasoning_effort_keys(attempts)
+    for task_rows in group_model_log_tasks(attempts):
         ordered = sorted(
             task_rows,
             key=lambda row: (
@@ -7545,6 +7585,8 @@ def aggregate_model_scoreboard_rows(
                 "retries": 0,
                 "first_try_passed": 0,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
                 "_duration_ms": [],
                 "_tokens": [],
                 "_task_types": {},
@@ -7560,8 +7602,17 @@ def aggregate_model_scoreboard_rows(
                 "failed": 0,
                 "first_try_passed": 0,
                 "last_seen": "",
+                "amended": 0,
+                "amendments": [],
             },
         )
+        void_key = (first.get("run_id"), first.get("task_key"))
+        if void_key in voided:
+            notes = notes_by_task.get(void_key, [])
+            for target in (model_entry, breakdown):
+                target["amended"] += 1
+                target["amendments"].extend(notes)
+            continue  # voided: evidence-void, drop from tasks / passed / first-try / retries
         passed = model_log_text(final.get("verdict")).upper() == "PASS"
         first_passed = model_log_text(first.get("verdict")).upper() == "PASS"
         for target in (model_entry, breakdown):
@@ -7585,9 +7636,13 @@ def aggregate_model_scoreboard_rows(
     finalized: list[dict[str, Any]] = []
     for entry in models.values():
         tasks_count = int(entry["tasks"])
+        if tasks_count == 0:
+            continue  # every task under this model was voided (F6): no misleading 0% row
         breakdown_rows = []
         for breakdown in entry["_task_types"].values():
             b_tasks = int(breakdown["tasks"])
+            if b_tasks == 0:
+                continue  # every task of this type was voided: drop the empty breakdown row
             breakdown_rows.append(
                 {
                     "task_type": breakdown["task_type"],
@@ -7598,6 +7653,8 @@ def aggregate_model_scoreboard_rows(
                     "first_try_pass_rate": breakdown["first_try_passed"] / b_tasks if b_tasks else 0.0,
                     "pass_rate": breakdown["passed"] / b_tasks if b_tasks else 0.0,
                     "last_seen": breakdown["last_seen"],
+                    "amended": breakdown["amended"],
+                    "amendments": breakdown["amendments"],
                 }
             )
         breakdown_rows.sort(key=lambda item: (-item["tasks"], item["task_type"]))
@@ -7625,6 +7682,8 @@ def aggregate_model_scoreboard_rows(
                 "median_duration_ms": median_int(entry["_duration_ms"]),
                 "median_tokens": median_int(entry["_tokens"]),
                 "last_seen": entry["last_seen"],
+                "amended": entry["amended"],
+                "amendments": entry["amendments"],
                 "task_types": breakdown_rows,
             }
         )
