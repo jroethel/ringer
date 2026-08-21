@@ -8803,6 +8803,37 @@ def run_amend_command(config: AppConfig, args: argparse.Namespace) -> int:
     return 0
 
 
+def triage_run(rows: list[dict[str, Any]], run_id: str) -> list[dict[str, Any]]:
+    """Read-only: FAIL/ERROR/TIMEOUT attempts for one run, with any amendment inline."""
+    attempts, voided, notes_by_task = partition_amendments(rows)
+    report: list[dict[str, Any]] = []
+    for row in attempts:
+        if row.get("run_id") != run_id or row.get("verdict") == "PASS":
+            continue
+        task_key = row.get("task_key")
+        key = (run_id, task_key)
+        report.append(
+            {
+                "task_key": task_key,
+                "verdict": row.get("verdict"),
+                "check_excerpt": model_log_text(row.get("notes")).strip(),
+                "amended": key in voided,
+                "amendment_note": ", ".join(notes_by_task.get(key, [])),
+            }
+        )
+    return report
+
+
+def run_triage_command(config: AppConfig, args: argparse.Namespace) -> int:
+    log_path = (args.log or config.eval.jsonl_path.expanduser().resolve()).expanduser().resolve()
+    rows, _skipped = read_model_log_rows(log_path)
+    report = triage_run(rows, args.run_id)
+    for entry in report:
+        marker = "[amended]" if entry["amended"] else "[unresolved]"
+        print(f"{entry['task_key']} {entry['verdict']} {marker} {entry['check_excerpt']}")
+    return 0
+
+
 class Verifier:
     async def verify(self, task: TaskSpec, taskdir: Path) -> VerifyResult:
         check_returncode, check_timed_out, output = await self._run_check(task.check, taskdir)
@@ -11168,6 +11199,10 @@ def build_parser() -> argparse.ArgumentParser:
     amend_parser.add_argument("--identity", help="who is amending; falls through resolve_identity() if omitted")
     amend_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
 
+    triage_parser = subparsers.add_parser("triage", help="list a run's FAIL attempts with check context, for audit")
+    triage_parser.add_argument("run_id")
+    triage_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
+
     catalog_parser = subparsers.add_parser("catalog", help="show or refresh the local OpenRouter model catalog")
     catalog_parser.add_argument("--refresh", action="store_true", help="fetch source and rewrite the local snapshot")
     catalog_parser.add_argument("--source", help=f"OpenRouter models URL or fixture file (default: {DEFAULT_CATALOG_SOURCE})")
@@ -11265,6 +11300,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_models_command(config, args)
         if args.command == "amend":
             return run_amend_command(config, args)
+        if args.command == "triage":
+            return run_triage_command(config, args)
         if args.command == "hud":
             return run_persistent_hud(
                 config,
