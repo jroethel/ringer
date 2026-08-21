@@ -6260,12 +6260,27 @@ def default_read_model_db_path() -> Path:
     return ringer_home() / "ringer.db"
 
 
+def log_has_amendments(path: Path) -> bool:
+    # ponytail: line-scan the whole log; when amendments exist, models skips the DB fast-path and
+    # reads the full JSONL. Fine at current log sizes (hundreds of rows); revisit if the log grows huge.
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                if '"type": "amendment"' in line:
+                    return True
+    except FileNotFoundError:
+        return False
+    return False
+
+
 def should_use_read_model_db(
     *,
     log_path: Path,
     default_log_path: Path,
     explicit_db: bool,
 ) -> bool:
+    if log_has_amendments(log_path):
+        return False
     if explicit_db:
         return True
     return log_path.expanduser().resolve() == default_log_path.expanduser().resolve()
@@ -6844,6 +6859,8 @@ def read_catalog_events_from_offset(path: Path, offset: int) -> tuple[list[dict[
 def insert_attempt_rows(conn: Any, rows: list[dict[str, Any]]) -> int:
     payloads: list[tuple[Any, ...]] = []
     for row in rows:
+        if row.get("type") == "amendment":
+            continue  # amendments carry no attempt fields; keep the read-model free of phantoms (F1)
         payloads.append(
             (
                 model_log_text(row.get("run_id")),
