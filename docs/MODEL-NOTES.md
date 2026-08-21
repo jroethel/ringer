@@ -148,6 +148,68 @@ checks and raw logs support — no vibes, no worker self-reports.
   read paths) plus an empirical XSS all-clear on the new DOM surfaces.
   Third proven-tier structured review today.
 
+- 2026-08-08 - loop-setup-reconcile (code-feature, harness claude-zai, loop-stack-session):
+  recorded fail-after-retry is MISATTRIBUTED - the check never ran. Ringer executes
+  checks via create_subprocess_shell -> /bin/sh (dash on this WSL host), which dies on
+  the check's first line (`set -uo pipefail`, "Illegal option -o pipefail"), so both
+  attempts burned against an unrunnable gate. Gate audit re-ran the full check under
+  bash against the surviving worktree: all six suites green, exactly 4 commits, clean
+  tree, footprint exactly the 8 owned files - work committed unchanged (3eaa7f9).
+- 2026-08-08 - same run, signal: the worker caught a real plan self-contradiction
+  (verbatim test needs `git rm --cached`, plan prose said bare `git rm -f`), deviated
+  correctly, and left a comment naming the reason. Second time GLM has diagnosed a
+  harness bug unprompted from the cheap lane. Amendment row appended to
+  AMENDMENTS-PENDING.md; harness fix (executable="/bin/bash" in _run_check) staged
+  for Jeremy, not applied.
+- 2026-08-09 - gitlab-glab-loop wave 1 (claude-zai engine): code-feature x2, both
+  first-try PASS under executed checks (own new suite plus the full 30-suite run
+  inside the worktree). task-1-tracker transcribed a 213-line verbatim test file and
+  a multi-branch dispatch rewrite (+303/-25) cleanly; task-2-mirrors was a small
+  case-block edit. Confirms the "tightly-specced plus executed check" lane again;
+  no signal events, no retries.
+- 2026-08-09 - gitlab-glab-loop wave 2 (claude-zai engine): code-feature x1, first-try
+  PASS. task-3-setup: a 37k-char spec with eleven interacting sub-steps across five
+  files (+358/-55); worker recorded two conservative readings in report.md instead of
+  guessing wide, both correct calls. The report-your-reading discipline holds on the
+  cheap lane.
+- 2026-08-09 - gitlab-glab-loop wave 4 (claude-zai engine): code-feature x1, first-try
+  PASS (task-5-migrate, +203/-20 across three files with a vendoring seam into
+  setup.sh). Mechanical end of the confirmed lane; no open questions, no retries.
+  Running tally this run: glm-5.2 is 4/4 first-try on code-feature.
+- 2026-08-09 - gitlab-glab-loop wave 5, signal (check-bug attribution): the recorded
+  task-6-fix fail-after-retry is MISATTRIBUTED. The manifest check and a stale repo
+  test (`acceptance.sh` scratch ban, premise false since afc7fbd) formed an
+  unwinnable gate; the worker fixed all three prose sites correctly, diagnosed the
+  conflict, named the exact stale line, and recommended the right resolution. Third
+  time GLM has diagnosed a harness/gate bug unprompted from the cheap lane. Row
+  logged in AMENDMENTS-PENDING.md; work salvaged from the failed worktree and
+  committed after gate audit.
+- 2026-08-09 - gitlab-glab-loop wave 5 (claude-zai engine): docs x1, first-try PASS
+  (task-6-docs, 7 files). The opus review then failed it on two residual GitHub-only
+  prose sites and one understated root list - real substance misses on the strongest
+  posterior lane. Lesson: multi-site "fix every occurrence" prose sweeps need the
+  occurrence list enumerated in the spec, or a review layer; the keyword check alone
+  passed a 3-of-5 fix.
+- 2026-08-09 - gitlab-glab-loop terminal repair (claude-zai engine): code-fix x1,
+  first-try PASS (task-3-fix: dry-run remote classification plus a committed
+  regression scenario). Orchestrator re-ran the reviewer's live repro post-apply
+  and confirmed the fix independently. Final run tally for glm-5.2: 6 tasks typed,
+  6 substance-correct, one recorded FAIL amended as a check bug.
+
+## opus via claude engine (`claude -p`, model `opus`)
+
+- 2026-08-09 - gitlab-glab-loop wave 3 (claude engine, model opus): code-feature x1,
+  first-try PASS on the run's risk-pinned unit (task-4-sweep: destructive archive
+  moves plus a judgment edit of an existing green suite, +343/-16). Signal: the
+  risk-concentration pin paid off first-try again; worker re-derived a plan count,
+  found it off by one for an accounted reason, and named one deliberate one-line
+  spec widening in its report instead of taking it silently.
+- 2026-08-09 - gitlab-glab-loop wave 3, code-review x1, first-try PASS
+  (task-4-review): walked 15 criteria, mutation-tested the guards it was asked to
+  verify, and cross-checked the one authorized test retarget by running the
+  pre-task suite against the new implementation. Verdict discipline held; two
+  advisory findings correctly routed to the orchestrator instead of self-fixed.
+
 ## kimi-k2.7 via opencode (`openrouter/moonshotai/kimi-k2.7-code`)
 
 - 2026-07-06 — adversarial pre-merge review (aicred spark): passed on
@@ -369,6 +431,71 @@ checks and raw logs support — no vibes, no worker self-reports.
 ## Process lessons (2026-07-28, PR #82 review)
 - **Ideas worth keeping from a rejected PR.** PR #82's pre-call gateway was dropped (needs your own API key, so it converts flat-rate OAuth plans into metered API billing; incompatible with Claude Code; and it saves tokens by stripping the tool list, which is the thing that makes the CLI worth using). One idea inside it is worth remembering if the problem ever comes back: an *explicitly blessed* answer cache — key a reviewed answer to the exact request plus the exact selected source packet, and replay it with zero upstream calls, never auto-accepting a model answer. It only fires on byte-identical repeats, which is why it didn't justify 2,000 lines here.
 - **Doc-stated support floors need a CI job or they are fiction.** README promised Python 3.11+ while CI only ever ran 3.12; a 3.12-only f-string reached review with a fully green suite. Either test the floor or move it.
+
+## glm-5.2 (claude-zai)
+- 2026-07-17 code-fix (stm-nav round 1): retry caused by an over-strict orchestrator check (byte-identical builds vs plan's "except timestamps"); on retry produced a clean idempotent-write fix rather than gaming the check, and flagged it honestly. Lesson: give GLM precise determinism semantics up front; it handles nuance well when told.
+- 2026-07-17 site-build (stm-nav round 6): logged FAIL is a CHECK bug, not a model failure - the worker's output was fully correct on manual audit (both "failures" were format-strict greps: a negative phrase-grep matching the requested link-out stub, and an allowlist grep matching an explanatory comment). Discount this row when reading the scoreboard.
+- 2026-07-17 docs (stm-nav round 8): second false FAIL from an orchestrator check (repo-wide negative grep counted historical docs as dangling references); worker's 23-file restructure was fully in scope and correct on audit. Rule distilled: negative assertions only over files the task owns, never repo-wide.
+- 2026-07-18 run summary (stm-nav, 21 rounds): glm-5.2 implemented 20/21 rounds, zero substantive failures; every recorded FAIL traced to orchestrator check bugs (5 total, all annotated above - amend these rows when the amendment feature lands). Opus took the one aesthetic-bar round (sitemap flow redesign), first-try pass. GLM validators caught the only two real content defects of the run.
+- 2026-07-19 site-build (prototypes-expectations-page): single fat task (author a 10-section content-heavy HTML page against a detailed plan + create a verbatim check + 7-file nav/orientation wiring), first-try pass in 15.7 min against a 33% first-try prior. Worker also correctly diagnosed an out-of-scope repo inconsistency (committed atlas stale vs committed sources), verified it against whats_next.md, and proposed the two-commit split the orchestrator adopted. Heavy-but-tightly-specced authoring with an executed check chain is a safe GLM lane; the proactive-diagnosis quality was above what the probation tier suggested.
+- 2026-07-19 presignoff-2b (1 code-feature + 2 code-fix, parallel x3): 3/3 first-try passes. The code-feature (generator template change: native details/summary collapse + localStorage persistence + CSS, plus two blurb wordsmiths) shipped a no-flash synchronous state application unprompted and correctly declined to add an unneeded custom event, documenting both. Tightly-specced generator work with executed check chains is confirmed GLM territory; wordsmithing to a hard char budget also landed well (130/136 vs 140).
+
+2026-07-19 - glm-5.2 (claude-zai), run model-routing-unification: 6/6 first-try, zero retries (5 docs, 1 code-fix). Spec style was detailed content contracts with verbatim blocks; transcription fidelity was perfect including nested quoting in shell doctor checks. Zero check bugs this run; lint caught the orchestrator's one pre-launch bug (phantom $RINGER_EXPORT_DIR from the old example plan). Supports: proven on docs; code-fix probation number remains amendment-depressed, this run adds a clean row.
+
+2026-07-20 - uiux-punchlist wave 1 (glm-5.2, claude-zai): code-feature (inventory scraper w/ injection contract) 1/1 first-try 707s; site-build (chrome CSS) 1/1 first-try 438s; code-fix (prototypes rename) retry 1 - attempt 1 renamed term+class but paraphrased the spec's required verbatim legend sentence; the check's quoted-fragment grep caught it and attempt 2 landed it exactly. Lesson: GLM treats "exact sentence" requirements as paraphrasable unless the sentence is set off as a quoted block in the spec; keep substance greps for verbatim contracts.
+
+2026-07-20 - uiux-punchlist wave 2 (7 parallel): glm-5.2 (claude-zai) 4/6 first-try. t03 code-feature (fat generator change: per-field card + JSON island injection + full-picklist embed) first-try 982s - confirms the heavy-but-tightly-specced generator lane. t05 site-build retry 1: attempt 1 missed the SharePoint href (spec said "the 2d URL" without spelling it - spec gap, split blame) and typed one em dash; attempt 2 clean. t08 site-build retry 1: committed its scratch task-local check into scripts/checks/ (outside ownership); in-check ownership gate caught it, attempt 2 relocated it and explained the root cause well. t07/t09/t10 first-try. opus (claude) 1/1 first-try on the judgment unit (61-story archetype mapping, 620s): 25 covered / 36 proposed, creation prompts grounded in a real validator script it found itself - the aesthetic/judgment pin keeps paying. Orchestrator gate fix (not a worker fault): the inventory injector needed em-dash sanitization at the data-to-display boundary; a whole-file em-dash check over a page holding injected workbook data is an invariant-missing-its-exception unless the injector sanitizes.
+- 2026-07-20 addendum, uiux-punchlist wave 3: glm-5.2 (claude-zai) site-build (schema.html shell surgery inside injected-blob constraints) 1/1 first-try, 696s. Wave totals for the run so far: glm 8/10 first-try, 10/10 pass; opus 2/2 first-try.
+- 2026-07-20 addendum, uiux-punchlist wave 4 (final): opus (claude) docs retry 1 - attempt 1 abstracted the 13.5px font-floor value away in the name of portability; the substance grep held and attempt 2 kept the number. Lesson: Opus over-generalizes "portable" toward valueless prose; pin the load-bearing constants in the spec. glm-5.2 code-fix x2: t13 retry 1 (built labels without the mandated exact literals), t14 first-try. Run final: 14/14 units passed, glm 9/12 first-try 12/12 pass, opus 2/3 first-try 3/3 pass, zero check bugs charged to workers, one orchestrator check-bug lesson (em-dash invariant needed the injected-data exception, fixed at the injector).
+- 2026-07-20 addendum, uiux-punchlist waves 5-6: glm-5.2 (claude-zai) docs (two-guide content merge with dedupe judgment + 5-page reference surgery) pass on retry (attempt 1 tripped the one-forge.css invariant with 4 carried-over references; dedupe decisions were documented and audited sound). t16 nav-feedback logged FAIL x2 but is a CHECK BUG, not a model failure: the orchestrator's ownership regex forbade scripts/checks/check_nav.py while the task structurally required it (check_nav resolves every nav href on disk; an external SharePoint URL needs the skip). Worker made the minimal correct 2-line check fix and passed every functional gate; work salvaged from the kept worktree and committed (forge 9c5ad30). Discount both t16 rows when reading the scoreboard; amend when ringer #65 lands (run uiux-punchlist-20260720T175349Z-p302692, task t16-nav-feedback). Rule re-learned: ownership lists must include the repo's own selftests when the change alters what the selftest validates.
+
+2026-07-22 - dshoney step-06 wave 11 (Agent-tool transport, dshon repo): opus code-feature (WP-24 consumer migration + release prep: live etl.py import swap, config v2 migration, wheel + provisioning doc) 1/1 first-try; opus code-review validator 1/1, re-derived every claim by a second route (independent pytest 262/1, rebuilt wheel, throwaway-venv import, byte-compared configs, cross-walked 24 WP logs) and correctly separated an authorized-deviation set from real criteria. Signal event: implementer disclosed a known-upstream data-loss gap (WP-19 first-format-wins destination collapse surfacing in a migrated live config) instead of papering over it - flag-don't-fudge held under a release-gate prompt. Step 06 final: 24/24 WPs merged, opus implementers 8/8 pass (1 fix cycle across them), sonnet-4.6 implementers 16/16 pass (3 fix cycles), opus validators caught every real defect they were shown.
+
+2026-07-23 - spec-backlog-input (forge, 1 fat code-feature task: 2-unit serialized page feature + verbatim Playwright check + docs): opus (claude) 1/1 first-try, 322s - transcribed a 163-line pinned check byte-identical to the plan block and landed every contract literal. glm-5.2 (claude-zai) shows 2 FAIL rows on this run_name that are NOT model signal: both were z.ai gateway 529 outages (zero worker output, ~15 min sustained), plus 1 ERROR row from a stale-worktree setup collision; discount all three when reading the scoreboard. Orchestrator check-bug lesson: ringer executes checks via /bin/sh (dash) - `set -o pipefail` is dash-illegal; guard commands individually instead.
+
+2026-08-07 - audit-remediation-loop wave 0 (ltv-rfm-segments repo, worktrees:false): glm-5.2 (claude-zai) code-fix T1-ruff-green logged fail/TIMEOUT x2 - NOT model signal, discount both rows: (a) 900s default timeout_s was a budget ceiling for a repo-wide sweep on a slow /mnt/c WSL filesystem (model made monotone progress, 461 -> 94 ruff errors across the two attempts, no bad edits, pytest baseline intact); (b) orchestrator CHECK BUG - with worktrees:false the check runs in the scratch task dir, not the repo, so relative `.venv/bin/ruff` hit exit 127 and expect_files could never resolve, meaning the check was unsatisfiable as written. Fix applied to all four ringer templates: specs open with an explicit cd to the repo, checks capture TD=$(pwd) then cd to the repo, expect_files are receipts the check copies into the task dir, timeout_s raised to 1800-3600. Rule learned: with worktrees:false, task dir is CWD for both worker and check - never use repo-relative paths bare.
+
+2026-08-07 - audit-remediation-loop T3b-ltv-reader (ltv-rfm-segments, worktrees:false): glm-5.2 (claude-zai) code-fix logged fail/FAIL x2 - CHECK BUG, discount both rows: the orchestrator's awk range pattern (/def load_ltv_output/,/def [a-z_]+\(/) self-terminates on its own start line (the def line matches both endpoints), so the substance grep saw only the signature and the check was unsatisfiable. Worker's attempt-1 code was fully correct (commit 261b302; verified at gate: reader on ltv/, sibling loader untouched, 619 tests green, ruff 0) and its attempt-2 diagnosis of the harness mechanics was itself accurate. Rule learned: never use an awk /start/,/end/ range where the start line can match the end pattern; use sed with anchored ^def endpoints.
+
+2026-08-08 - audit-remediation-loop waves 3-5 Agent-tool receipts (ltv-rfm-segments, canonical checkout, batched per model/task_type): opus code-feature (T5 golden harness with determinism canonicalization) 1/1 first-try. opus code-fix (T6 period amount, T7 float64 money, T8 date-math bundle) 3/3 first-try - each landed test-first with zero repair rounds, and each surfaced a real out-of-scope regression or precision issue unprompted (T6: running_totals gift_records gap; T7: legacy float32 path; T8: produced the human-gate diff report). opus code-review validators 6/6 - every verdict earned by independent rerun; standouts: T8's validator exhaustively classified ~3.05M changed golden cells (0 unattributed) and caught a report-precision error the implementer missed; T9's validator dual-tree-grepped 12 deletions. sonnet code-fix (T9 legacy deletion, 254k tokens/152 tool uses) 1/1 first-try with a correct caller map. Signal event: opus T10 honored a mandatory equivalence STOP gate - proof failed (normalize_once not behavior-preserving), it committed only skipped proof tests and escalated with evidence instead of forcing the golden green; flag-don't-fudge held under an end-of-run completion pressure prompt. glm-5.2 (claude-zai) closing note: 7 ringer units (T1-T4, T3b, T6b, T9b) all functionally correct; the only FAIL rows this run were orchestrator check bugs (T1 CWD, T3b awk), both amended above.
+
+- 2026-08-08 (glm-5.2, code-fix, normalize-once-batching W1): task1-money-float64 first-try pass, 4.6m, exact-line spec followed cleanly; flagged its one judgment call (docstring sync) unprompted. Check gap (orchestrator fault, not model): check omitted ruff, one auto-fixable I001 slipped to the gate.
+- 2026-08-08 (opus, code-feature, normalize-once-batching W1): task2-batch-normalize first-try pass, 11.8m, ~150-line dispatch restructure + self-contained integration boundary test; opus adversarial validator confirmed all 9 criteria incl. the date_aggregated_df silent-failure guard. Pin (risk-concentration) justified in hindsight: clean first-try on the run's highest-risk unit.
+- 2026-08-08 (glm-5.2, code-feature, normalize-once-batching W2): task3-uat-loader pass on attempt 2. Attempt-1 fail was a SPEC bug (the spec's embedded "verbatim" test code was lint-dirty: duplicate inline imports I001, semicolon E702, caught by the distilled ruff check step); on retry the model resolved the verbatim-vs-lint conflict correctly (semantics untouched, all asserts intact) and disclosed the deviation unprompted. Good judgment signal, not a capability miss.
+- 2026-08-08 (glm-5.2, code-feature, normalize-once-batching W3): task4a-golden-diff-classifier first-try pass, 13.8m, 984-line typed classifier + 8-case synthetic self-check, mypy/ruff clean under the repo ratchet. Long numeric spec (float32-ULP bound, four column-set contracts) executed faithfully; flagged its derive-vs-hardcode judgment call unprompted. Strong signal for the tightly-specced + executed-check lane.
+- 2026-08-08 (glm-5.2, code-fix, normalize-once-batching w4): calcdate-stability run verdict FAIL x2 is a CHECK BUG, not model signal - the orchestrator's check string had a bash parse error (brace group closed with } where fi belonged), so the check died before running anything on both attempts. The model's attempt-1 code was correct (orchestrator re-ran every check step on the applied tree: 10 tests pass, ruff clean, full gate OVERALL: PASS, committed); attempt 2 correctly diagnosed the broken check and manually exported the patch. Treat both FAIL rows as amended; strong diagnostic signal.
+
+2026-08-08 - loop-improve (loop-stack-session, 1 fat code-feature task: working-skill refactor + new skill + vendored playbook + gate test): glm-5.2 (claude-zai) 1/1 first-try, 19.8m. Three sequential authoring tasks committed per plan; byte-exact contract compliance (four gate suites green in worktree AND re-derived at the gate; deep-read of the prose-extraction diff found zero deviations; all five mandated rephrases of vendored MIT playbook lines faithful). Confirms the tightly-specced authoring lane extends to skill-prose surgery, not just code. Orchestrator lesson (not model signal): `ringer.py lint` exits non-zero on advisory findings, so the `lint && run` launch chain silently never runs a manifest carrying a by-design finding - lint separately, review, then `run` alone.
+
+## sonnet-5 (Agent-tool transport)
+
+- 2026-08-08 - code-fix (audit-sweep run, loop-stack-session: 7-task plumbing
+  hardening as a single Agent-tool unit): first-attempt pass. Executed a
+  verbatim TDD plan (7 RED-GREEN-commit cycles) byte-exact; independent opus
+  validator passed all five criteria with zero scope violations. Signal: the
+  worker correctly attributed the one full-suite failure to a pre-existing
+  repo bug and reproduced it at the base commit instead of hacking around it.
+  Routed by benchmark prior (default Agent-tool execution worker); no re-route.
+
+## 2026-08-16 copywriter-skill-loop wave 1 (design-brand-pack)
+
+- glm-5.2 / claude-zai, docs (t1-vocabulary, t3-spine, t4-assumption-protocol, t5-seat-protocol): 4/4 pass on attempt 1; opus validators confirmed t1, t3, t5 with zero violations.
+- Signal, spec-bug attribution: t4's validator FAIL traced to the orchestrator's manifest expansion (a frozen block flattened into bullets), not the model; the worker reproduced its spec faithfully and the fix was applied at the gate. Do not charge glm-5.2.
+- glm-5.2 / claude-zai, code-feature (t2-checker, 517-line stdlib checker with a 20-scenario CLI self-test): attempt 1 passed its executed check but an opus validator's own probes found fail-open ledger parsing plus two spec contradictions; a relaunch with the amended spec passed and re-validated clean, including regression probes. Lesson repeated: executed checks bound what workers prove, adversarial validation catches what checks cannot; the second attempt cost one flat-rate round.
+- opus / Agent tool, code-review (5 validator dispatches): all five verdicts evidence-backed and decisive; the t2 validator's self-invented probes were the round's highest-value output.
+- 2026-08-16 wave 2: opus / Agent tool, research (t8-v5-baseline delta audit, 48-row ledger over 10 sources plus a 133-claim carry-forward): strong first pass (independently re-derived counts, refused to invent lineage for the sourceless 2027 claim) but validator found two missed extractions and two broken citations; one SendMessage repair fixed seven of eight items; final citation off-by-two repaired at the gate. opus validator (code-review stance on prose): both rounds decisive, second round caught its own repair's miss - evidence-first verdicts holding up.
+- 2026-08-16 wave 3: opus / Agent tool across t9b draft (2,900-word sourced guide, first try inside band, only expected gate open), t9c extraction (146 rows, caught 9 misinterpretations in a fresh opus draft, re-verified 64 markers), t9d resolution (9/9 fixed, both gates green first try), t9g triage (43 findings verdicted, one protocol breach caught by the package validator and repaired in one round). sonnet / Agent tool, t9e re-extraction: clean, precise, cheap - right-sized routing. glm-5.2 / claude-zai, persona-review x4 seats: 4/4 pass, findings substantive (a caption arithmetic error three opus stages missed was flagged by all four seats); persona work remains squarely glm's zone. Pattern for the record: every stage that FAILED validation failed on claim-coverage discipline, never on prose quality - the protocol's paperwork is where models cut corners.
+
+## 2026-08-17 content-guides-and-form-audit loop (Agent-tool transport, not ringer)
+- sonnet / docs (wave 2, Task 1): clean pass, frozen-block insertion into a live global guide; validator confirmed verbatim. No issues.
+- sonnet / research (wave 2, Task 4): pass after one repair. Substance genuine (17-row ltv-rfm digest, no filler). Signal: needed a one-sentence-per-line repair because the task's acceptance check (t4.sh) omits the awk guard that t1/t2 carry; the adversarial validator caught it, the script did not. Check-gap attribution, not a model weakness.
+- sonnet / docs (wave 4, Task 3): clean pass, citation swap against a frozen line-to-rule map. Signal: isolation:worktree landed the branch on main not the integration branch; worker detected and reset before editing. Harness-quirk, not a model weakness; future prompts pin the base branch explicitly.
+- opus / docs (wave 5, Tasks 5/6/8): three parallel clean passes, all validated. Task 5 three doctype files, Task 6 five persona files, Task 8 form-audit protocol + Stage 3 rewrite. Signal: Task 8 hit a check-vs-plan tension (check bans "doctype" in the cold-seat section, plan step 5 says "no doctype file"); worker resolved via "contract file" synonym, validator confirmed faithful. Opus held voice and contract fidelity across all three; no repairs needed.
+- sonnet / docs (wave 6, Task 7): clean pass, plan amendment against a frozen shape. Signal: validator returned fail on scope, but both points were false positives from the validator prompt's wrong premise about commit structure (worker split into two commits; a shared ancestor commit read as a branch change). Orchestrator re-derived against git and attributed pass. Lesson: give validators the branch name and let them derive commit structure, do not assert which commit holds what.
+- opus / probe (wave 6, Task 9 calibration): the form audit, run blind, correctly separated the r1/r2 pair (r1 blocking, r2 clean). Note: it blocked r1 on spine/never/always rather than the owner's stated altitude/focus, a defensible structural read; the calibration check was relaxed to "blocks on any dimension" rather than tuning the blind auditor.
+
+- 2026-08-17 sonnet code-feature: copywriter-rule-corpus-audit wave 1 (claude engine) - PASS first attempt; wrote a 372-line stdlib audit script + emitted a 259-row skeleton CSV that reconciled by independent grep. Clean.
+- 2026-08-17 glm-5.2 code-feature/research: copywriter-rule-corpus-audit T1 - SIGNAL: three consecutive runs failed on sustained z.ai 529 (api.z.ai overloaded, ~10 min window); no worker output produced. Not a model-quality signal - provider outage. Re-routed T1 and T2 to sonnet at owner request.
 - 2026-08-04 (substack-scraper resource-sites-matching loop, wave 1): code-feature x2 (T1-report render format, T2-models host_matches/split_host_path helpers) both PASS attempt 1 (84s/93s). Ownership-scoped checks (task pytest target + scoped ruff only, no repo-wide gates in partial worktrees) produced zero false FAILs. Worker open-questions discipline good: flagged an import-style fold and a `*.www.` canonicalization edge conservatively, both correct readings. glm-5.2 claude-zai 2/2 clean this run.
 - 2026-08-04 (substack-scraper resource-sites-matching loop, wave 2): code-feature x1 (T3-config url/urls parsing + wildcard validation) PASS attempt 1 (5.7m). All nine embedded tests plus every un-tested validation branch implemented with entry-named errors. glm-5.2 claude-zai 3/3 clean this run.
 - 2026-08-04 (substack-scraper resource-sites-matching loop, wave 3 + run close): code-feature x1 (T4-matching) scoreboard FAIL x2 - ATTRIBUTED at the gate as a formatting-only miss, not a substance failure: all 176 tests, ruff check, mypy, and both substance greps passed in the preserved worktree; the sole red step was `ruff format --check` on ONE test file whose layout the spec supplied verbatim ("add exactly these tests") and ruff wanted to collapse. Orchestrator salvaged (formatted the one file, re-verified full chain green, exported and committed). Worker's own attempt-2 diagnosis guessed infrastructure interruption - wrong; note the spec/check tension: verbatim-test-layout instructions + a format gate can conflict; future specs should say "then run ruff format on files you touched" (T3's worker did this unprompted and passed). Treat T4 as attempt-1-substance-correct. Run total glm-5.2 claude-zai: 4/4 substantively correct outputs (code-feature x4), one formatting salvage.
