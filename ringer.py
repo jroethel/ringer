@@ -8808,7 +8808,7 @@ def triage_run(rows: list[dict[str, Any]], run_id: str) -> list[dict[str, Any]]:
     attempts, voided, notes_by_task = partition_amendments(rows)
     report: list[dict[str, Any]] = []
     for row in attempts:
-        if row.get("run_id") != run_id or row.get("verdict") == "PASS":
+        if row.get("run_id") != run_id or model_log_text(row.get("verdict")).upper() == "PASS":
             continue
         task_key = row.get("task_key")
         key = (run_id, task_key)
