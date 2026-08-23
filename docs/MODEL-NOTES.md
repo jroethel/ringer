@@ -560,3 +560,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-08-23 glm-5.2/claude-zai code-feature: t6-tracker-reminder first-try PASS (TDD spec with embedded test; 3-backend stderr reminder, stdout contract held).
 - 2026-08-23 glm-5.2/claude-zai code-feature: t2-setup-renderer first-try PASS (loop-stack wave 2; awk substitution rule x3 renderers + preserve-on-reconcile, verbatim assertions landed).
 - 2026-08-23 glm-5.2/claude-zai docs: t3-roadmap-rtag, t4-skills-prose first-try PASS (one-line R-tag; 5-file dot-grammar prose sweep, no dash residue).
+- 2026-08-23 glm-5.2/claude-zai code-feature: t5-lint-classes-fg first-try PASS (loop-stack wave 3, high effort; stem_of dual-grammar rewrite + classes f/g + 44-line fixture suite, standalone stem_of probe included unprompted).
