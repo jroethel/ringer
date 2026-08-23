@@ -565,3 +565,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-08-23 glm-5.2 (claude-zai, code-feature): sp-drift-policy wave 2 - 1/1 first-try pass (molt_verdict, gate-critical). Adversarial review: pinned resolution and selftest blocks reproduced verbatim (0 missing lines on line audit), scope exact.
 - 2026-08-23 glm-5.2 (claude-zai, code-feature): sp-drift-policy wave 3 - 1/1 first-try pass (molt_report). Full 5-module suite green on integration branch; tracker.sh routing verified, no raw gh.
 - 2026-08-23 glm-5.2 (claude-zai, code-feature): sp-drift-policy wave 4 - 1/1 first-try pass (molt.py, gate-critical). Adversarial review clean; real-corpora probe ran end-to-end, REVIEW=365.
+- 2026-08-23 glm-5.2 (claude-zai, code-feature): sp-drift-policy wave 5 - 1/1 first-try pass (pin-target wiring, gate-critical). Adversarial review clean: sort -V lookup, retro forwarding, provenance surgery per spec, guards intact. Run total: 7/7 first-try, 0 repairs.
