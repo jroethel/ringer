@@ -31,6 +31,8 @@ import tempfile
 import threading
 import time
 import tomllib
+import http.client
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -791,6 +793,27 @@ class UpdateConfig:
 
 
 @dataclass(frozen=True)
+class JevConfig:
+    enabled: bool = False
+    task_type: bool = False
+    fail_flag: bool = False
+    model: str = "jev-1.13.0"
+    endpoint: str = "https://api.typesafe.ai/v1/systemone"
+    timeout_s: float = 5.0
+    task_type_cutoff: float = 0.9
+    fail_flag_cutoff: float = 0.9
+    held_out: tuple[str, ...] = ("research", "probe", "persona-review")
+
+    @property
+    def task_type_active(self) -> bool:
+        return self.enabled and self.task_type
+
+    @property
+    def fail_flag_active(self) -> bool:
+        return self.enabled and self.fail_flag
+
+
+@dataclass(frozen=True)
 class SelfUpdateResult:
     status: str
     behind: int = 0
@@ -1048,6 +1071,7 @@ class AppConfig:
     artifact: ArtifactConfig
     steering: SteeringConfig = field(default_factory=SteeringConfig)
     update: UpdateConfig = field(default_factory=UpdateConfig)
+    jev: JevConfig = field(default_factory=JevConfig)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppConfig":
@@ -1075,6 +1099,7 @@ class AppConfig:
         engines = load_engines(data.get("engines"))
         artifact_config = load_artifact_config(data.get("artifact"), state_dir)
         update_config = load_update_config(data.get("update"))
+        jev_config = load_jev_config(data.get("jev"))
         try:
             steering_config = load_steering_config(data.get("steering"))
         except Exception:
@@ -1094,6 +1119,7 @@ class AppConfig:
             artifact=artifact_config,
             steering=steering_config,
             update=update_config,
+            jev=jev_config,
         )
 
 
@@ -1123,6 +1149,279 @@ def load_update_config(raw: Any) -> UpdateConfig:
     if interval <= 0:
         raise ValueError("update.check_interval_s must be positive")
     return UpdateConfig(auto=bool(raw.get("auto", True)), check_interval_s=interval)
+
+
+def load_jev_config(raw: Any) -> JevConfig:
+    if raw is None:
+        return JevConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("jev must be a TOML table")
+    defaults = JevConfig()
+    values: dict[str, Any] = {}
+    for key in ("enabled", "task_type", "fail_flag"):
+        value = raw.get(key, getattr(defaults, key))
+        if not isinstance(value, bool):
+            raise ValueError(f"jev.{key} must be true or false")
+        values[key] = value
+    model = raw.get("model", defaults.model)
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("jev.model must be a non-empty string")
+    values["model"] = model.strip()
+    endpoint = raw.get("endpoint", defaults.endpoint)
+    if not isinstance(endpoint, str) or not endpoint.startswith(("http://", "https://")):
+        raise ValueError("jev.endpoint must be an http or https URL")
+    values["endpoint"] = endpoint
+    timeout_s = raw.get("timeout_s", defaults.timeout_s)
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise ValueError("jev.timeout_s must be a number")
+    if timeout_s <= 0:
+        raise ValueError("jev.timeout_s must be positive")
+    values["timeout_s"] = float(timeout_s)
+    for key in ("task_type_cutoff", "fail_flag_cutoff"):
+        value = raw.get(key, getattr(defaults, key))
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            raise ValueError(f"jev.{key} must be a number between 0 and 1")
+        values[key] = float(value)
+    held_out = raw.get("held_out", list(defaults.held_out))
+    if not isinstance(held_out, list) or not all(isinstance(item, str) for item in held_out):
+        raise ValueError("jev.held_out must be a list of strings")
+    values["held_out"] = tuple(item.strip() for item in held_out)
+    return JevConfig(**values)
+
+
+def load_jev_config_file(path: Path | None) -> JevConfig:
+    """Read only the [jev] table; a missing or unreadable config file means Jev is off."""
+    config_path = path or env_config_path() or default_config_path()
+    if not config_path.exists():
+        return JevConfig()
+    try:
+        with config_path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return JevConfig()
+    if not isinstance(data, dict):
+        return JevConfig()
+    return load_jev_config(data.get("jev"))
+
+
+JEV_API_KEY_ENV = "TYPESAFE_API_KEY"
+JEV_CONTRACT_FAIL_FLAG = "fail_flag-v1"
+JEV_CHECK_OUTPUT_MARKER = "raw_check_output_first_2000_chars:\n"
+# Exactly what each decision point sends off the host, and the cap on each field.
+# docs/JEV.md "Declared fields" must match; tests/test_jev_plumbing.py enforces it.
+JEV_DECLARED_FIELDS: dict[str, dict[str, int]] = {
+    "task_type": {"task_spec": 12000},
+    "fail_flag": {"task_spec": 500, "check_output": 2000},
+}
+JEV_FAIL_QUESTIONS: dict[str, dict[str, Any]] = {
+    "fault": {
+        "type": "choice",
+        "instructions": (
+            "A software task's automated check failed. Using `task_spec` and `check_output`, "
+            "decide what caused the failure."
+        ),
+        "criteria": {
+            "worker": (
+                "The worker's output is wrong, incomplete, or missing what the spec asked for, "
+                "and the check correctly caught it."
+            ),
+            "check": (
+                "The check itself is broken: it tests the wrong thing, matches content the spec asked for, "
+                "has a syntax or shell-quoting error, looks outside the files the worker was allowed to change, "
+                "or demands a state the spec forbids."
+            ),
+            "spec": "The spec is self-contradictory or unsatisfiable, so no correct work could pass.",
+            "infra": (
+                "The worker lane or environment failed: no worker output, an API outage, or a sandbox, "
+                "network, or missing-tool error unrelated to the work."
+            ),
+            "unclear": "`task_spec` and `check_output` do not show enough to tell which of the other options applies.",
+        },
+    },
+    "check_cause": {
+        "type": "choice",
+        "instructions": "If the check itself is broken, which kind of check bug is it?",
+        "criteria": {
+            "matches_requested": "The check's pattern matches content the spec requested, or matches a comment.",
+            "syntax_or_transport": "A shell syntax, quoting, or interpreter error stopped the check before its assertions ran.",
+            "out_of_scope": "The check inspects files or state outside the worker's allowed boundary.",
+            "contradicts_spec": "The check demands a state the spec forbids.",
+            "stale_premise": "The check encodes a fact that is no longer true.",
+            "not_a_check_bug": "The check is not broken.",
+        },
+    },
+}
+
+
+@dataclass(frozen=True)
+class JevResult:
+    answers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    model: str = ""
+    usage: dict[str, int] = field(default_factory=dict)
+    skipped: str = ""
+
+
+def _jev_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def parse_jev_response(raw: bytes, questions: dict[str, dict[str, Any]]) -> JevResult:
+    bad = JevResult(skipped="bad-response")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return bad
+    if not isinstance(payload, dict) or not isinstance(payload.get("answers"), dict):
+        return bad
+    answers: dict[str, dict[str, Any]] = {}
+    for qid, question in questions.items():
+        answer = payload["answers"].get(qid)
+        if not isinstance(answer, dict):
+            return bad
+        choice = answer.get("choice")
+        confidence = answer.get("confidence")
+        probabilities = answer.get("probabilities")
+        if not isinstance(choice, str) or choice not in (question.get("criteria") or {}):
+            return bad
+        if not _jev_number(confidence) or not 0 <= confidence <= 1:
+            return bad
+        if not isinstance(probabilities, dict) or not all(_jev_number(v) for v in probabilities.values()):
+            return bad
+        answers[qid] = {
+            "choice": choice,
+            "confidence": float(confidence),
+            "probabilities": {str(k): float(v) for k, v in probabilities.items()},
+        }
+    raw_usage = payload.get("usage")
+    usage = {
+        name: value
+        for name, value in (raw_usage.items() if isinstance(raw_usage, dict) else ())
+        if name in ("input_tokens", "output_tokens") and isinstance(value, int) and not isinstance(value, bool)
+    }
+    return JevResult(answers=answers, model=str(payload.get("model") or ""), usage=usage)
+
+
+def jev_call(config: JevConfig, state: dict[str, str], questions: dict[str, dict[str, Any]]) -> JevResult:
+    """One Jev request. Never raises: any failure is a JevResult with a skip reason."""
+    key = os.environ.get(JEV_API_KEY_ENV, "").strip()
+    if not key:
+        return JevResult(skipped="no-key")
+    try:
+        body = json.dumps({"state": state, "model": config.model, "questions": questions}).encode("utf-8")
+        request = urllib.request.Request(
+            config.endpoint,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "User-Agent": "ringer.py",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=config.timeout_s) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        return JevResult(skipped=f"http-{exc.code}")
+    except TimeoutError:
+        return JevResult(skipped="timeout")
+    except urllib.error.URLError as exc:
+        return JevResult(skipped="timeout" if isinstance(exc.reason, TimeoutError) else "network")
+    except (OSError, http.client.HTTPException):
+        return JevResult(skipped="network")
+    except Exception as exc:
+        return JevResult(skipped=f"error-{type(exc).__name__}")
+    return parse_jev_response(raw, questions)
+
+
+async def jev_call_async(config: JevConfig, state: dict[str, str], questions: dict[str, dict[str, Any]]) -> JevResult:
+    """Run jev_call off the event loop so a slow API never stalls other tasks."""
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(jev_call, config, state, questions), config.timeout_s + 1)
+    except asyncio.TimeoutError:
+        return JevResult(skipped="timeout")
+
+
+JEV_MAX_CONCURRENT_CALLS = 4
+
+
+def jev_reason_trips_breaker(reason: str) -> bool:
+    """Service-level failures turn a feature off for the invocation; request-specific ones skip one decision."""
+    return reason in {"no-key", "network", "timeout", "http-401", "http-429"} or bool(re.fullmatch(r"http-5\d\d", reason))
+
+
+@dataclass
+class JevSession:
+    """One breaker per feature per invocation; all run-time sessions share one limiter."""
+
+    config: JevConfig
+    feature: str
+    limiter: asyncio.Semaphore | None = None
+    skip_reason: str = ""
+
+    def _note(self, result: JevResult) -> JevResult:
+        if result.skipped and not self.skip_reason and jev_reason_trips_breaker(result.skipped):
+            self.skip_reason = result.skipped
+            print(f"jev: skipped {self.feature} ({result.skipped}); continuing without Jev", file=sys.stderr)
+        return result
+
+    def call(self, state: dict[str, str], questions: dict[str, dict[str, Any]]) -> JevResult:
+        if self.skip_reason:
+            return JevResult(skipped=self.skip_reason)
+        return self._note(jev_call(self.config, state, questions))
+
+    async def call_async(self, state: dict[str, str], questions: dict[str, dict[str, Any]]) -> JevResult:
+        if self.limiter is None:
+            return await self._call_async(state, questions)
+        async with self.limiter:  # queue time is spent here, before the wait_for budget starts
+            return await self._call_async(state, questions)
+
+    async def _call_async(self, state: dict[str, str], questions: dict[str, dict[str, Any]]) -> JevResult:
+        if self.skip_reason:  # checked after the limiter, so queued calls see a breaker that tripped meanwhile
+            return JevResult(skipped=self.skip_reason)
+        return self._note(await jev_call_async(self.config, state, questions))
+
+
+def jev_fail_state(logged_spec: str, check_output: str) -> dict[str, str]:
+    caps = JEV_DECLARED_FIELDS["fail_flag"]
+    return {"task_spec": logged_spec[: caps["task_spec"]], "check_output": check_output[: caps["check_output"]]}
+
+
+def decide_fail_flag(answers: dict[str, dict[str, Any]], cutoff: float) -> dict[str, Any]:
+    fault = answers.get("fault") or {}
+    confidence = float(fault.get("confidence") or 0.0)
+    return {
+        "flagged": fault.get("choice") == "check" and confidence >= cutoff,
+        "fault": fault.get("choice"),
+        "confidence": confidence,
+        "probabilities": dict(fault.get("probabilities") or {}),
+        "cause": (answers.get("check_cause") or {}).get("choice") or "unspecified",
+    }
+
+
+def jev_amend_command(run_id: str, task_key: str, cause: str, confidence: float, log_path: Path) -> str:
+    # --log is mandatory: run_amend_command otherwise resolves the log from the default config,
+    # which under a non-default --config is a different, append-only file.
+    note = f"jev: suspected check fault ({cause}, confidence {confidence:.2f})"
+    return " ".join([
+        "./ringer.py", "amend", shlex.quote(run_id), shlex.quote(task_key), "--reclassify", "check_bug",
+        "--note", shlex.quote(note), "--log", shlex.quote(str(log_path)),
+    ])
+
+
+def jev_fail_flag_record(result: JevResult, cutoff: float, run_id: str, task_key: str, log_path: Path) -> dict[str, Any]:
+    if result.skipped:
+        return {"skipped": result.skipped}
+    record = decide_fail_flag(result.answers, cutoff)
+    record["amend_command"] = (
+        jev_amend_command(run_id, task_key, record["cause"], record["confidence"], log_path) if record["flagged"] else ""
+    )
+    record.update(model=result.model, usage=dict(result.usage), cutoff=cutoff)
+    return record
+
+
+def jev_check_output_from_notes(notes: str) -> str:
+    _, marker, rest = notes.partition(JEV_CHECK_OUTPUT_MARKER)
+    return rest if marker else ""
 
 
 def self_update_state_path(state_dir: Path) -> Path:
