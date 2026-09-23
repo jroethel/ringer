@@ -1,0 +1,2 @@
+{"task_key": "m1-readme", "hand_label": "docs", "spec_source": "manifest", "choice": "docs", "probabilities": {"docs": 0.94, "code-feature": 0.06}, "confidence": 0.94, "input_tokens": 700, "output_tokens": 80, "latency_ms": 184.0}
+{"task_key": "l3-retry-wrapper", "hand_label": "code-feature", "spec_source": "log", "choice": "code-review", "probabilities": {"code-review": 0.51, "code-fix": 0.49}, "confidence": 0.51, "input_tokens": 720, "output_tokens": 84, "latency_ms": 251.0}
