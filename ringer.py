@@ -1424,6 +1424,168 @@ def jev_check_output_from_notes(notes: str) -> str:
     return rest if marker else ""
 
 
+JEV_CONTRACT_TASK_TYPE = "task_type-v1"
+JEV_TASK_TYPE_VOCAB: tuple[str, ...] = (
+    "code-feature", "code-fix", "code-review", "docs",
+    "site-build", "persona-review", "probe", "research",
+)
+JEV_TASK_TYPE_CRITERIA: dict[str, str] = {
+    "code-feature": "Implementing new functionality, infrastructure, or capability in code.",
+    "code-fix": "Repairing a bug, regression, or defect in existing code.",
+    "code-review": "Reviewing, auditing, or critiquing code without implementing changes.",
+    "docs": "Writing or editing documentation, reference prose, or explanatory text with no code deliverable.",
+    "site-build": "Building, styling, or assembling a website, HTML page, or visual or branded deliverable.",
+    "persona-review": "Reviewing an artifact for alignment with a persona, voice, or audience fit.",
+    "probe": "Running a diagnostic probe, smoke test, or capability check.",
+    "research": "Gathering, fetching, or synthesizing external information into findings.",
+}
+JEV_TASK_TYPE_INSTRUCTIONS = "Classify the software task described in `task_spec` into exactly one task type."
+JEV_TASK_TYPE_QUESTIONS: dict[str, dict[str, Any]] = {
+    "task_type": {"type": "choice", "instructions": JEV_TASK_TYPE_INSTRUCTIONS, "criteria": JEV_TASK_TYPE_CRITERIA},
+}
+
+
+def decide_task_type(
+    hand: str, answer: dict[str, Any] | None, cutoff: float, held_out: tuple[str, ...]
+) -> tuple[str, str, str]:
+    """Return (recorded task_type, source "hand"|"jev", reason the hand label was kept or "")."""
+    if answer is None:
+        return hand, "hand", "no-answer"
+    choice = str(answer.get("choice") or "")
+    if hand in held_out or choice in held_out:
+        return hand, "hand", "held-out"
+    if hand and hand not in JEV_TASK_TYPE_VOCAB:
+        return hand, "hand", "hand-outside-vocabulary"
+    if float(answer.get("confidence") or 0.0) < cutoff:
+        return hand, "hand", "below-cutoff"
+    return choice, "jev", ""
+
+
+def jev_cache_path() -> Path:
+    return ringer_home() / "jev-cache.jsonl"
+
+
+def jev_cache_key(contract: str, model: str, spec_sent: str) -> str:
+    return hashlib.sha256(json.dumps([contract, model, spec_sent]).encode("utf-8")).hexdigest()
+
+
+def load_jev_cache(path: Path) -> dict[str, dict[str, Any]]:
+    """Read the task_type answer cache; bad lines are skipped, later lines win, never raises."""
+    cache: dict[str, dict[str, Any]] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return cache
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("key"), str)
+            or entry.get("contract") != JEV_CONTRACT_TASK_TYPE
+            or not isinstance(entry.get("answer"), dict)
+        ):
+            continue
+        cache[entry["key"]] = entry
+    return cache
+
+
+def jev_task_type_request(task: TaskSpec, config: JevConfig) -> tuple[str, dict[str, str]]:
+    spec_sent = task.spec[: JEV_DECLARED_FIELDS["task_type"]["task_spec"]]
+    return jev_cache_key(JEV_CONTRACT_TASK_TYPE, config.model, spec_sent), {"task_spec": spec_sent}
+
+
+def jev_task_type_store(
+    cache: dict[str, dict[str, Any]], path: Path, key: str, result: JevResult, config: JevConfig
+) -> dict[str, Any]:
+    entry = {
+        "key": key,
+        "contract": JEV_CONTRACT_TASK_TYPE,
+        "requested_model": config.model,
+        "model": result.model,
+        "answer": result.answers["task_type"],
+        "usage": result.usage,
+        "cached_at": utc_now_iso(),
+    }
+    with contextlib.suppress(OSError):  # a read-only home never breaks lint or run
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, sort_keys=True) + "\n")
+    cache[key] = entry
+    return {**entry, "cached": False}
+
+
+def jev_task_type_fields(
+    task: TaskSpec, entry: dict[str, Any] | None, skip_reason: str, config: JevConfig
+) -> tuple[dict[str, Any], str]:
+    hand = task.task_type
+    if entry is None:
+        return (
+            {"task_type": hand, "task_type_source": "hand", "task_type_hand": hand,
+             "jev_task_type": {"skipped": skip_reason}},
+            skip_reason,
+        )
+    answer = entry["answer"]
+    recorded, source, reason = decide_task_type(hand, answer, config.task_type_cutoff, config.held_out)
+    jev_task_type = {
+        "choice": answer.get("choice"),
+        "confidence": answer.get("confidence"),
+        "probabilities": answer.get("probabilities"),
+        "model": entry["model"],
+        "usage": entry["usage"],
+        "cutoff": config.task_type_cutoff,
+        "cached": entry["cached"],
+    }
+    return (
+        {"task_type": recorded, "task_type_source": source, "task_type_hand": hand, "jev_task_type": jev_task_type},
+        reason,
+    )
+
+
+def jev_task_type_lint_line(task_key: str, fields: dict[str, Any], reason: str) -> str:
+    hand = fields["task_type_hand"] or "(none)"
+    j = fields["jev_task_type"]
+    if "skipped" in j:
+        if reason == "redact_spec":
+            return f"jev: {task_key}: task_type not sent ({reason}) hand={hand} -> keeps hand"
+        return f"jev: {task_key}: task_type skipped ({reason}) hand={hand} -> keeps hand"
+    line = f"jev: {task_key}: task_type={j['choice']} confidence={j['confidence']:.2f} hand={hand} -> "
+    if fields["task_type_source"] != "jev":
+        return line + f"keeps hand ({reason})"
+    return line + ("agrees" if j["choice"] == fields["task_type_hand"] else "overrides hand")
+
+
+def jev_lint_task_type_lines(manifest: Manifest, config: JevConfig) -> list[str]:
+    """One info line per task; lint calls Jev one task at a time, so no limiter."""
+    session = JevSession(config, "task_type")
+    path = jev_cache_path()
+    cache = load_jev_cache(path)
+    lines: list[str] = []
+    for task in manifest.tasks:
+        if task.redact_spec:
+            fields, reason = jev_task_type_fields(task, None, "redact_spec", config)
+            lines.append(jev_task_type_lint_line(task.key, fields, reason))
+            continue
+        key, state = jev_task_type_request(task, config)
+        if key in cache:
+            entry = {**cache[key], "cached": True}
+        else:
+            result = session.call(state, JEV_TASK_TYPE_QUESTIONS)
+            if result.skipped:
+                if not jev_reason_trips_breaker(result.skipped):  # a tripped breaker already printed its one line
+                    fields, reason = jev_task_type_fields(task, None, result.skipped, config)
+                    lines.append(jev_task_type_lint_line(task.key, fields, reason))
+                continue
+            entry = jev_task_type_store(cache, path, key, result, config)
+        fields, reason = jev_task_type_fields(task, entry, "", config)
+        lines.append(jev_task_type_lint_line(task.key, fields, reason))
+    return lines
+
+
 def self_update_state_path(state_dir: Path) -> Path:
     return state_dir.expanduser().resolve() / SELF_UPDATE_STATE_FILE
 
@@ -2452,6 +2614,7 @@ class TaskRuntime:
     setup_error: str | None = None
     last_worker_command: list[str] = field(default_factory=list)
     steering: dict[str, Any] | None = None
+    jev_task_type: dict[str, Any] | None = None
 
     def elapsed_s(self, now: float) -> float:
         if self.started_at_monotonic is None:
@@ -6122,7 +6285,7 @@ class EvalLogger:
             db_row = {
                 key: value
                 for key, value in row.items()
-                if key not in {"model", "reasoning_effort", "task_type", "retry"}
+                if key not in {"model", "reasoning_effort", "task_type", "retry", "task_type_source", "task_type_hand", "jev_task_type"}
             }
             try:
                 self._conn.execute(
@@ -9241,6 +9404,10 @@ class RingerRunner:
         )
         self.logger = EvalLogger(config.eval)
         self.verifier = Verifier()
+        self.jev_limiter = asyncio.Semaphore(JEV_MAX_CONCURRENT_CALLS)
+        self.jev_task_type_session = JevSession(config.jev, "task_type", self.jev_limiter)
+        self.jev_fail_flag_session = JevSession(config.jev, "fail_flag", self.jev_limiter)
+        self.jev_cache = load_jev_cache(jev_cache_path()) if config.jev.task_type_active else {}
         self.semaphore = asyncio.Semaphore(manifest.max_parallel)
         self.active_processes: dict[int, asyncio.subprocess.Process] = {}
 
@@ -9294,6 +9461,8 @@ class RingerRunner:
                 kill_process_group(proc)
 
     async def _run_task(self, runtime: TaskRuntime) -> None:
+        if self.config.jev.task_type_active:  # before the semaphore, so a slow call never holds a worker slot
+            await self._jev_record_task_type(runtime)
         async with self.semaphore:
             with self.lock:
                 runtime.started_at_monotonic = time.monotonic()
@@ -9740,32 +9909,52 @@ class RingerRunner:
                 verdict=verdict,
                 duration_ms=duration_ms,
             )
-        self.logger.log_attempt(
-            {
-                "run_id": self.run_id,
-                "pattern": "ringer-py",
-                "task_key": runtime.task.key,
-                "spec": (
-                    "[redacted request packet]"
-                    if runtime.task.redact_spec
-                    else spec[:500]
-                ),
-                "worker_engine": runtime.task.engine,
-                "shepherd_model": SHEPHERD_MODEL,
-                "verify_method": VERIFY_METHOD,
-                "verdict": verdict,
-                "duration_ms": duration_ms,
-                "worker_tokens": worker.tokens,
-                "notes": "\n".join(notes_parts),
-                "orchestrator": self.identity,
-                "model": stamped_model,
-                "reported_model": reported_model,
-                "expected_model": expected_model,
-                "reasoning_effort": reasoning_effort,
-                "task_type": runtime.task.task_type,
-                "retry": retrying,
-            }
-        )
+        row = {
+            "run_id": self.run_id,
+            "pattern": "ringer-py",
+            "task_key": runtime.task.key,
+            "spec": (
+                "[redacted request packet]"
+                if runtime.task.redact_spec
+                else spec[:500]
+            ),
+            "worker_engine": runtime.task.engine,
+            "shepherd_model": SHEPHERD_MODEL,
+            "verify_method": VERIFY_METHOD,
+            "verdict": verdict,
+            "duration_ms": duration_ms,
+            "worker_tokens": worker.tokens,
+            "notes": "\n".join(notes_parts),
+            "orchestrator": self.identity,
+            "model": stamped_model,
+            "reported_model": reported_model,
+            "expected_model": expected_model,
+            "reasoning_effort": reasoning_effort,
+            "task_type": runtime.task.task_type,
+            "retry": retrying,
+        }
+        if runtime.jev_task_type is not None:
+            row.update(runtime.jev_task_type)
+        self.logger.log_attempt(row)
+
+    async def _jev_record_task_type(self, runtime: TaskRuntime) -> None:
+        task = runtime.task
+        entry: dict[str, Any] | None = None
+        skip_reason = "redact_spec"
+        if not task.redact_spec:
+            key, state = jev_task_type_request(task, self.config.jev)
+            if key in self.jev_cache:
+                entry = {**self.jev_cache[key], "cached": True}
+            else:
+                result = await self.jev_task_type_session.call_async(state, JEV_TASK_TYPE_QUESTIONS)
+                if result.skipped:
+                    skip_reason = result.skipped
+                else:
+                    entry = jev_task_type_store(self.jev_cache, jev_cache_path(), key, result, self.config.jev)
+        fields, _reason = jev_task_type_fields(task, entry, skip_reason, self.config.jev)
+        with self.lock:
+            runtime.task = dataclass_replace(runtime.task, task_type=fields["task_type"])
+            runtime.jev_task_type = fields
 
     def _write_steering_observation(
         self,
@@ -11584,8 +11773,13 @@ def main(argv: list[str] | None = None) -> int:
                 manifest,
                 allow_noncanonical_route=args.allow_noncanonical_route,
             )
+            jev_config = load_jev_config_file(args.config)
+            jev_lines = jev_lint_task_type_lines(manifest, jev_config) if jev_config.task_type_active else []
             if findings:
                 print_lint_findings(findings)
+            for line in jev_lines:
+                print(line)
+            if findings:
                 return 1
             print(f"lint: clean ({len(manifest.tasks)} tasks)")
             return 0

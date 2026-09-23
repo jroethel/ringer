@@ -82,3 +82,15 @@ It writes `results.jsonl`, `summary.json`, and `review.csv` into its `--out` dir
 The gate passes when `summary.json` shows `bar_met: true` (at least 9 of the 11 labeled check_bug tasks flagged), and when hand-judged wrong flags in `review.csv` plus `false_flags` total at most 20% of `flags_total`.
 One rewording of the questions (contract `fail_flag-v2`) and one more replay are allowed; if the gate still fails, the FAIL flag is parked.
 The FAIL flag is not built yet, so `fail_flag = true` has no effect.
+
+## task_type
+
+With `enabled = true` and `task_type = true`, `./ringer.py lint` and `./ringer.py run` ask Jev for each task's type, one request per task.
+The question is the pilot's pinned 8-type contract (`task_type-v1`): `code-feature`, `code-fix`, `code-review`, `docs`, `site-build`, `persona-review`, `probe`, `research`.
+Jev's label is recorded when its confidence is at least `task_type_cutoff`, neither Jev's label nor the hand label is in `held_out`, and the hand label is empty or one of the 8 types.
+Otherwise the hand label is recorded.
+Lint prints one info line per task, for example `jev: t1: task_type=site-build confidence=0.97 hand=docs -> overrides hand` (or `-> agrees`, or `-> keeps hand (<reason>)`), and the exit code is unchanged.
+A task counts as labeled by Jev whenever Jev's label was used, including when it matches the hand label.
+Answers are cached in `~/.ringer/jev-cache.jsonl` (or under `RINGER_HOME`), keyed by the contract, the model, and the exact spec text sent, so an unchanged task makes no second call and a cutoff change needs no call.
+Each attempt row then carries `task_type` (the recorded value), `task_type_source` (`hand` or `jev`), `task_type_hand`, and `jev_task_type` with Jev's choice, confidence, probabilities, `model`, `usage`, the cutoff, and whether the answer came from the cache.
+The Postgres log backend drops these fields, as it already drops `task_type`.
