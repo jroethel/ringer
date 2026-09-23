@@ -11,3 +11,5 @@ hud/gen/
 hud/icons/icon.iconset/
 *.log
 jjr/
+jev-pilot/out/
+jev-pilot/.venv/
