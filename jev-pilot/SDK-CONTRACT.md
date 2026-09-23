@@ -6,12 +6,12 @@ All three pages were fetched live on 2026-09-22 and all three returned HTTP 200.
 
 ## Pinned version and install command
 
-| Fact | Value | Source |
-| --- | --- | --- |
-| pip package name | `typesafe-sdk` | https://docs.typesafe.ai/sdk/python.md |
-| pinned version | `0.7.1` | PyPI release metadata for `typesafe-sdk`, read 2026-09-22 |
-| requires-python | `>=3.10` | PyPI release metadata for `typesafe-sdk`, read 2026-09-22 |
-| venv python | 3.12.3 | `jev-pilot/.venv` |
+| Fact             | Value          | Source                                                    |
+| ---------------- | -------------- | --------------------------------------------------------- |
+| pip package name | `typesafe-sdk` | https://docs.typesafe.ai/sdk/python.md                    |
+| pinned version   | `0.7.1`        | PyPI release metadata for `typesafe-sdk`, read 2026-09-22 |
+| requires-python  | `>=3.10`       | PyPI release metadata for `typesafe-sdk`, read 2026-09-22 |
+| venv python      | 3.12.3         | `jev-pilot/.venv`                                         |
 
 The docs page gives the install command without a version, so the exact version to pin was taken from the PyPI release metadata for that same package name.
 
@@ -178,13 +178,13 @@ On `Usage`, verbatim from the same page:
 
 The pinned accessor table:
 
-| Value | Accessor |
-| --- | --- |
-| chosen option | `response.choices["task_type"].choice` |
+| Value                    | Accessor                                      |
+| ------------------------ | --------------------------------------------- |
+| chosen option            | `response.choices["task_type"].choice`        |
 | probability distribution | `response.choices["task_type"].probabilities` |
-| confidence | `response.choices["task_type"].confidence` |
-| input tokens | `response.usage.input_tokens` |
-| output tokens | `response.usage.output_tokens` |
+| confidence               | `response.choices["task_type"].confidence`    |
+| input tokens             | `response.usage.input_tokens`                 |
+| output tokens            | `response.usage.output_tokens`                |
 
 Token counts are passed through as `int | None` rather than coerced, because the SDK types them that way.
 
