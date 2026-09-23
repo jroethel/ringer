@@ -1,0 +1,9 @@
+{
+  "tasks": [
+    {
+      "key": "task-a",
+      "task_type": "docs",
+      "spec": "You are writing the reference documentation for the widget export pipeline.\nCover the input schema, the transform steps, and the output format in detail.\nInclude a worked example with realistic field names and values so a new reader\ncan follow the pipeline end to end without asking a follow-up question.\nAlso note the known limitations of the current exporter and the workarounds\nthat are currently in use by the team while a permanent fix is pending."
+    }
+  ]
+}

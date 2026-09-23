@@ -1,0 +1,5 @@
+{"task_key": "task-a", "task_type": "docs", "spec": "Write the reference docs for the widget export pipeline (truncated log spec)."}
+{"task_key": "task-b", "task_type": "code-fix", "spec": "Fix the null-pointer crash in the login handler when the session cookie is missing."}
+{"task_key": "task-a", "task_type": "docs", "spec": "Write the reference docs for the widget export pipeline (truncated log spec)."}
+{"task_key": "task-c", "task_type": "", "spec": "This row has no task_type and must be dropped from the built dataset."}
+{"task_key": "task-d", "task_type": "code-fix", "spec": "Rotate the leaked credential AKIAIOSFODNN7EXAMPLE out of the deploy script before merging."}
