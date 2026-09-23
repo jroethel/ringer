@@ -147,7 +147,8 @@ The truncated-spec stratum, which carries 113 of 155 tasks and 41 of 52 disagree
 No ringer runtime path was modified at any point in this pilot.
 All pilot code lives under `jev-pilot/` on the branch `jev-pilot-task-type`, and all outputs live under the git-ignored `jev-pilot/out/`.
 The hand-assigned `task_type` remained authoritative throughout; Jev's picks were written to disk and never fed back into any ringer decision.
-`~/.ringer/runs.jsonl` and `~/.ringer/manifests/` were read only.
+The dataset was built from a frozen snapshot of `~/.ringer/runs.jsonl` taken at pre-flight, `~/.ringer/runs.snapshot-2026-09-22.jsonl`, byte-identical at copy time.
+The live log and `~/.ringer/manifests/` were therefore never mutated, and the measurement set could not drift mid-run.
 
 This is enforced by a test, not by assertion.
 `test_ringer_runtime_paths_untouched_since_branch_point` in `jev-pilot/tests/test_writeup.py` takes the merge-base of `main` and `HEAD` and diffs `ringer.py`, `registry`, `engines`, `hooks`, `hud`, and `dashboard` across the whole branch, asserting the changed-file list is empty.
