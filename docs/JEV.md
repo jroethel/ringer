@@ -94,3 +94,11 @@ A task counts as labeled by Jev whenever Jev's label was used, including when it
 Answers are cached in `~/.ringer/jev-cache.jsonl` (or under `RINGER_HOME`), keyed by the contract, the model, and the exact spec text sent, so an unchanged task makes no second call and a cutoff change needs no call.
 Each attempt row then carries `task_type` (the recorded value), `task_type_source` (`hand` or `jev`), `task_type_hand`, and `jev_task_type` with Jev's choice, confidence, probabilities, `model`, `usage`, the cutoff, and whether the answer came from the cache.
 The Postgres log backend drops these fields, as it already drops `task_type`.
+
+## Scoreboard
+
+`./ringer.py models` groups results by the recorded task_type, as before.
+Once the log holds at least one Jev-labeled task, each bucket header shows how many tasks were labeled by hand and how many by Jev, for example `Task type: docs (hand 40, jev 8)`, and `--json` groups carry `task_type_sources: {"hand": n, "jev": n}`.
+A log with no Jev-labeled task prints exactly what it printed before Jev existed.
+A task's source is its final attempt row's `task_type_source`; rows written before Jev count as `hand` when they have a task_type, and untyped rows count as neither.
+The SQLite read model stores `task_type_source` from schema version 4; run `./ringer.py db rebuild` if an older ringer process ingested Jev-labeled rows before the upgrade.

@@ -6442,6 +6442,13 @@ def model_log_row_task_type(row: dict[str, Any]) -> str:
     return task_type or "(untyped)"
 
 
+def model_log_row_task_type_source(row: dict[str, Any]) -> str:
+    source = model_log_text(row.get("task_type_source"))
+    if source in ("hand", "jev"):
+        return source
+    return "hand" if model_log_text(row.get("task_type")) else ""
+
+
 def model_log_int(value: Any) -> int | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -6619,6 +6626,7 @@ def aggregate_model_log_rows(
                 "last_seen": "",
                 "amended": 0,
                 "amendments": [],
+                "task_type_sources": {"hand": 0, "jev": 0},
                 "_first_try_passed": 0,
                 "_duration_ms": [],
                 "_tokens": [],
@@ -6630,6 +6638,9 @@ def aggregate_model_log_rows(
             group["amendments"].extend(notes_by_task.get(void_key, []))
             continue  # voided: evidence-void, drop from tasks / passed / first-try
         group["tasks"] += 1
+        source = model_log_row_task_type_source(final)
+        if source:
+            group["task_type_sources"][source] += 1
         group["attempts"] += len(ordered)
         if model_log_text(final.get("verdict")).upper() == "PASS":
             group["passed"] += 1
@@ -6678,6 +6689,7 @@ def aggregate_model_log_rows(
                 "last_seen": group["last_seen"],
                 "amended": group["amended"],
                 "amendments": group["amendments"],
+                "task_type_sources": group["task_type_sources"],
             }
         )
     return sorted(
@@ -7155,7 +7167,7 @@ def create_read_model_schema(conn: Any) -> None:
         row = conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if row is not None:
             schema_version = int(row[0])
-    needs_stamp = user_version != 3 or schema_version != 3
+    needs_stamp = user_version != 4 or schema_version != 4
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -7173,6 +7185,7 @@ def create_read_model_schema(conn: Any) -> None:
             expected_model TEXT,
             reasoning_effort TEXT,
             task_type TEXT,
+            task_type_source TEXT,
             retry INTEGER,
             verdict TEXT,
             duration_ms INTEGER,
@@ -7230,6 +7243,8 @@ def create_read_model_schema(conn: Any) -> None:
     )
     if not read_model_column_exists(conn, "attempts", "reasoning_effort"):
         conn.execute("ALTER TABLE attempts ADD COLUMN reasoning_effort TEXT")
+    if not read_model_column_exists(conn, "attempts", "task_type_source"):
+        conn.execute("ALTER TABLE attempts ADD COLUMN task_type_source TEXT")
     if not read_model_column_exists(conn, "attempts", "reported_model"):
         conn.execute("ALTER TABLE attempts ADD COLUMN reported_model TEXT")
     if not read_model_column_exists(conn, "attempts", "expected_model"):
@@ -7244,8 +7259,8 @@ def create_read_model_schema(conn: Any) -> None:
         conn.executescript(
             """
             DELETE FROM schema_version;
-            INSERT INTO schema_version(version) VALUES (3);
-            PRAGMA user_version = 3;
+            INSERT INTO schema_version(version) VALUES (4);
+            PRAGMA user_version = 4;
             """
         )
 
@@ -7337,6 +7352,7 @@ def insert_attempt_rows(conn: Any, rows: list[dict[str, Any]]) -> int:
                 model_log_text(row.get("expected_model")) or None,
                 model_log_row_reasoning_effort(row),
                 model_log_text(row.get("task_type")),
+                model_log_text(row.get("task_type_source")) or None,
                 1 if model_log_row_is_retry(row) else 0,
                 model_log_text(row.get("verdict")),
                 model_log_int(row.get("duration_ms")),
@@ -7349,10 +7365,10 @@ def insert_attempt_rows(conn: Any, rows: list[dict[str, Any]]) -> int:
             """
             INSERT INTO attempts (
                 run_id, task_key, logged_at, engine, model, reported_model, expected_model,
-                reasoning_effort, task_type, retry,
+                reasoning_effort, task_type, task_type_source, retry,
                 verdict, duration_ms, worker_tokens, orchestrator
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             payloads,
         )
@@ -7665,7 +7681,7 @@ def db_attempt_rows(
     with contextlib.closing(connect_read_model_db_readonly(db_path)) as conn:
         query = """
             SELECT run_id, task_key, logged_at, engine, model, reported_model, expected_model,
-                   reasoning_effort, task_type, retry,
+                   reasoning_effort, task_type, task_type_source, retry,
                    verdict, duration_ms, worker_tokens, orchestrator
             FROM attempts
         """
@@ -7685,6 +7701,7 @@ def db_attempt_rows(
                 "expected_model": row["expected_model"],
                 "reasoning_effort": row["reasoning_effort"],
                 "task_type": row["task_type"],
+                "task_type_source": row["task_type_source"],
                 "retry": bool(row["retry"]),
                 "verdict": row["verdict"],
                 "duration_ms": row["duration_ms"],
@@ -8972,6 +8989,20 @@ def write_model_scoreboard_html(
     return target
 
 
+def drop_task_type_sources_without_jev(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop task_type_sources from every group when no Jev-labeled task is in the input.
+
+    A Jev-free log must yield today's payload key for key, so the counts are exposed
+    only once at least one task was labeled by Jev.
+    """
+    if any((group.get("task_type_sources") or {}).get("jev") for group in groups):
+        return groups
+    return [
+        {key: value for key, value in group.items() if key != "task_type_sources"}
+        for group in groups
+    ]
+
+
 def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list[dict[str, Any]]) -> None:
     print(f"Model log: {path} ({rows_read} rows, {skipped} skipped lines)")
     widths = (32, 20, 18, 18, 10, 7, 10, 7, 8, 15, 14, 14, 60)
@@ -8982,13 +9013,33 @@ def print_model_log_table(path: Path, rows_read: int, skipped: int, groups: list
     if not groups:
         print(header)
         print("-" * len(header))
-    for group in groups:
+    show_sources = any((group.get("task_type_sources") or {}).get("jev") for group in groups)
+    sources_by_block: dict[int, tuple[int, int]] = {}
+    if show_sources:
+        start = 0
+        for index in range(1, len(groups) + 1):
+            same_type = index < len(groups) and str(groups[index].get("task_type") or "(untyped)") == str(
+                groups[start].get("task_type") or "(untyped)"
+            )
+            if same_type:
+                continue
+            block = groups[start:index]
+            sources_by_block[start] = (
+                sum(int((group.get("task_type_sources") or {}).get("hand") or 0) for group in block),
+                sum(int((group.get("task_type_sources") or {}).get("jev") or 0) for group in block),
+            )
+            start = index
+    for index, group in enumerate(groups):
         task_type = str(group.get("task_type") or "(untyped)")
         if task_type != current_task_type:
             if current_task_type is not None:
                 print()
             current_task_type = task_type
-            print(f"Task type: {task_type}")
+            if show_sources:
+                hand, jev = sources_by_block[index]
+                print(f"Task type: {task_type} (hand {hand}, jev {jev})")
+            else:
+                print(f"Task type: {task_type}")
             print(header)
             print("-" * len(header))
         display = str(group.get("model_display") or group["model"])
@@ -9100,7 +9151,7 @@ def build_models_api_payload(
     return {
         "generated_at": utc_now_iso(),
         "columns": list(MODEL_SCOREBOARD_COLUMNS),
-        "groups": groups,
+        "groups": drop_task_type_sources_without_jev(groups),
         "rollup": ordered_rollup,
     }
 
@@ -9203,7 +9254,7 @@ def run_models_command(config: AppConfig, args: argparse.Namespace) -> int:
             open_in_browser(file_href(page_path))
         return 0
     if args.json:
-        print(json.dumps(groups))
+        print(json.dumps(drop_task_type_sources_without_jev(groups)))
     else:
         print_model_log_table(log_path, len(rows), skipped, groups)
     return 0
