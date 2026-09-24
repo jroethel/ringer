@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -17,12 +16,11 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(TESTS))
 
 import ringer  # noqa: E402
-from jev_stub import DUMMY_KEY, JevStub, fail_flag_response  # noqa: E402
+from jev_stub import DUMMY_KEY, JevStub, fail_flag_response, jev_cli_env  # noqa: E402
 
 SCRIPT = ROOT / "scripts" / "jev_fail_replay.py"
 MINI_LOG = TESTS / "fixtures" / "jev_replay_mini_runs.jsonl"
 MINI_LABELS = TESTS / "fixtures" / "jev_replay_mini_labels.json"
-PROXY_VARS = ("http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY")
 
 
 def first_fail_rows() -> dict[tuple[str, str], dict]:
@@ -56,14 +54,7 @@ class ReplayTests(unittest.TestCase):
     def replay(self, *extra: str, log: Path = MINI_LOG, labels: Path = MINI_LABELS, key: str | None = DUMMY_KEY):
         cmd = [sys.executable, "-B", str(SCRIPT), "--log", str(log), "--labels", str(labels),
                "--out", str(self.out), "--config", str(self.config), *extra]
-        env = os.environ.copy()
-        for name in ("TYPESAFE_API_KEY", "RINGER_CONFIG", *PROXY_VARS):
-            env.pop(name, None)
-        env.update({"PYTHONDONTWRITEBYTECODE": "1", "RINGER_NO_SELF_UPDATE": "1",
-                    "RINGER_HOME": str(self.root / "ringer-home"),
-                    "no_proxy": "127.0.0.1,localhost", "NO_PROXY": "127.0.0.1,localhost"})
-        if key is not None:
-            env["TYPESAFE_API_KEY"] = key
+        env = jev_cli_env(self.root, self.root / "ringer-home", key)
         return subprocess.run(cmd, cwd=ROOT, env=env, text=True, capture_output=True, timeout=60, check=False)
 
     def results(self) -> list[dict]:

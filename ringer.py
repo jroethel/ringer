@@ -808,10 +808,6 @@ class JevConfig:
     def task_type_active(self) -> bool:
         return self.enabled and self.task_type
 
-    @property
-    def fail_flag_active(self) -> bool:
-        return self.enabled and self.fail_flag
-
 
 @dataclass(frozen=True)
 class SelfUpdateResult:
@@ -1488,6 +1484,11 @@ def load_jev_cache(path: Path) -> dict[str, dict[str, Any]]:
             or not isinstance(entry.get("key"), str)
             or entry.get("contract") != JEV_CONTRACT_TASK_TYPE
             or not isinstance(entry.get("answer"), dict)
+            or not isinstance(entry.get("model"), str)
+            or not isinstance(entry.get("usage"), dict)
+            or not isinstance(entry["answer"].get("choice"), str)
+            or not _jev_number(entry["answer"].get("confidence"))
+            or not isinstance(entry["answer"].get("probabilities"), dict)
         ):
             continue
         cache[entry["key"]] = entry
@@ -9457,7 +9458,6 @@ class RingerRunner:
         self.verifier = Verifier()
         self.jev_limiter = asyncio.Semaphore(JEV_MAX_CONCURRENT_CALLS)
         self.jev_task_type_session = JevSession(config.jev, "task_type", self.jev_limiter)
-        self.jev_fail_flag_session = JevSession(config.jev, "fail_flag", self.jev_limiter)
         self.jev_cache = load_jev_cache(jev_cache_path()) if config.jev.task_type_active else {}
         self.semaphore = asyncio.Semaphore(manifest.max_parallel)
         self.active_processes: dict[int, asyncio.subprocess.Process] = {}
@@ -9948,8 +9948,7 @@ class RingerRunner:
             notes_parts.append(f"worker_error={worker.error}")
         if verify.missing_files:
             notes_parts.append(f"missing_expect_files={json.dumps(list(verify.missing_files))}")
-        notes_parts.append("raw_check_output_first_2000_chars:")
-        notes_parts.append(verify.raw_output_excerpt)
+        notes_parts.append(JEV_CHECK_OUTPUT_MARKER + verify.raw_output_excerpt)
         with contextlib.suppress(Exception):
             self._write_steering_observation(
                 runtime,

@@ -100,6 +100,28 @@ class TaskTypeRequestTests(unittest.TestCase):
             self.assertEqual("site-build", cache["k1"]["answer"]["choice"])
             self.assertEqual({}, ringer.load_jev_cache(Path(temp) / "missing.jsonl"))
 
+    def test_cache_loader_skips_wellformed_json_that_would_crash_the_consumers(self) -> None:
+        def entry(key: str, **overrides: object) -> dict:
+            base = {"key": key, "contract": "task_type-v1", "requested_model": "jev-1.13.0", "model": "jev-1.13.0",
+                    "answer": answer("docs", 0.95), "usage": {"input_tokens": 1, "output_tokens": 1},
+                    "cached_at": "2026-09-23T00:00:00+00:00"}
+            base.update(overrides)
+            return base
+
+        good_answer = answer("docs", 0.95)
+        bad = [
+            entry("bad-model", model=1),
+            entry("bad-usage", usage=[]),
+            entry("bad-choice", answer=good_answer | {"choice": 1}),
+            entry("bad-confidence", answer=good_answer | {"confidence": "high"}),
+            entry("bad-probabilities", answer=good_answer | {"probabilities": "high"}),
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "jev-cache.jsonl"
+            lines = [json.dumps(entry("good-key"))] + [json.dumps(item) for item in bad]
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            self.assertEqual({"good-key"}, set(ringer.load_jev_cache(path)))
+
 
 class PostgresRowTests(unittest.TestCase):
     def test_jev_task_type_keys_are_dropped_like_task_type(self) -> None:

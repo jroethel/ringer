@@ -161,6 +161,25 @@ class JevStub:
             self._server = None
 
 
+def jev_cli_env(root: Path, ringer_home: Path, key: str | None) -> dict[str, str]:
+    env = os.environ.copy()
+    for name in ("TYPESAFE_API_KEY", "RINGER_CONFIG", *PROXY_VARS):
+        env.pop(name, None)
+    env.update({
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "RINGER_NO_SELF_UPDATE": "1",
+        "RINGER_NO_CATALOG_REFRESH": "1",
+        "RINGER_HOME": str(ringer_home),
+        "XDG_CONFIG_HOME": str(root / "xdg"),
+        "HOME": str(root / "home"),
+        "no_proxy": "127.0.0.1,localhost",
+        "NO_PROXY": "127.0.0.1,localhost",
+    })
+    if key is not None:
+        env["TYPESAFE_API_KEY"] = key
+    return env
+
+
 class JevCliTestCase(unittest.TestCase):
     """Runs the real ringer CLI in a subprocess against the loopback stub."""
 
@@ -245,21 +264,7 @@ class JevCliTestCase(unittest.TestCase):
         if config is not None:
             cmd += ["--config", str(config)]
         cmd += list(args)
-        env = os.environ.copy()
-        for name in ("TYPESAFE_API_KEY", "RINGER_CONFIG", *PROXY_VARS):
-            env.pop(name, None)
-        env.update({
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "RINGER_NO_SELF_UPDATE": "1",
-            "RINGER_NO_CATALOG_REFRESH": "1",
-            "RINGER_HOME": str(self.ringer_home),
-            "XDG_CONFIG_HOME": str(self.root / "xdg"),
-            "HOME": str(self.root / "home"),
-            "no_proxy": "127.0.0.1,localhost",
-            "NO_PROXY": "127.0.0.1,localhost",
-        })
-        if key is not None:
-            env["TYPESAFE_API_KEY"] = key
+        env = jev_cli_env(self.root, self.ringer_home, key)
         return subprocess.run(cmd, cwd=ROOT, env=env, text=True, capture_output=True,
                               timeout=timeout, check=False)
 

@@ -59,15 +59,11 @@ class JevConfigTests(unittest.TestCase):
              config.timeout_s, config.task_type_cutoff, config.fail_flag_cutoff, config.held_out),
         )
         self.assertFalse(config.task_type_active)
-        self.assertFalse(config.fail_flag_active)
 
     def test_a_feature_needs_the_master_switch_and_its_own(self) -> None:
         self.assertFalse(ringer.JevConfig(task_type=True, fail_flag=True).task_type_active)
-        self.assertFalse(ringer.JevConfig(task_type=True, fail_flag=True).fail_flag_active)
         self.assertFalse(ringer.JevConfig(enabled=True).task_type_active)
-        self.assertFalse(ringer.JevConfig(enabled=True).fail_flag_active)
         self.assertTrue(ringer.JevConfig(enabled=True, task_type=True).task_type_active)
-        self.assertTrue(ringer.JevConfig(enabled=True, fail_flag=True).fail_flag_active)
 
     def test_app_config_without_a_jev_table_is_all_off(self) -> None:
         config = ringer.AppConfig.load(self.write('[eval]\nbackend = "jsonl"\n'))
