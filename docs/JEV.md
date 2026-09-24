@@ -76,12 +76,11 @@ At about 100 calls a month of up to 1,500 input tokens each, Jev costs under $0.
 
 ## FAIL flag gate
 
-Keep `fail_flag = false` until the offline replay passes.
-The replay script `scripts/jev_fail_replay.py` sends each logged task's first FAIL to Jev with the same fields and caps the live flag uses.
-It writes `results.jsonl`, `summary.json`, and `review.csv` into its `--out` directory and is safe to rerun, because finished pairs are skipped.
-The gate passes when `summary.json` shows `bar_met: true` (at least 9 of the 11 labeled check_bug tasks flagged), and when hand-judged wrong flags in `review.csv` plus `false_flags` total at most 20% of `flags_total`.
-One rewording of the questions (contract `fail_flag-v2`) and one more replay are allowed; if the gate still fails, the FAIL flag is parked.
-The FAIL flag is not built yet, so `fail_flag = true` has no effect.
+The FAIL flag is parked as of 2026-09-23, and `fail_flag = true` has no effect because the flag was never built.
+The offline replay ran once on 2026-09-23 with contract `fail_flag-v1` over the 47 logged FAIL pairs and missed the bar: it flagged 0 of the 11 labeled check_bug tasks and 0 tasks overall, with a highest `check` probability of 0.78 against the 0.9 cutoff.
+The replay script `scripts/jev_fail_replay.py` still sends each logged task's first FAIL to Jev with the same fields and caps a live flag would use, writes `results.jsonl`, `summary.json`, and `review.csv` into its `--out` directory, and is safe to rerun, because finished pairs are skipped.
+The bar it scores is unchanged: `bar_met: true` needs at least 9 of the 11 labeled check_bug tasks flagged, and hand-judged wrong flags in `review.csv` plus `false_flags` must total at most 20% of `flags_total`.
+The plan's one allowed rewording (`fail_flag-v2`) was not spent, because the declared fields, not the wording, are the likely limit; the handoff `docs/handoffs/2026-09-23.jev-fail-flag-parked.md` records the evidence and the follow-up candidates.
 
 ## task_type
 
