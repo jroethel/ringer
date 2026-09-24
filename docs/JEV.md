@@ -14,12 +14,12 @@ Each feature has its own section below; a switch whose section is missing has no
 |--------------------|-------------------------------------------|----------------------------------------------------------------------|
 | `enabled`          | `false`                                   | Master switch; no Jev feature runs unless this is `true`.            |
 | `task_type`        | `false`                                   | Record the task_type Jev assigns, in `lint` and `run`.               |
-| `fail_flag`        | `false`                                   | Ask Jev whether a FAIL is the check's fault before the retry.        |
+| `fail_flag`        | `false`                                   | Parked: would ask Jev whether a FAIL is a check fault; no effect.    |
 | `model`            | `"jev-1.13.0"`                            | Pinned model version sent with every request.                        |
 | `endpoint`         | `"https://api.typesafe.ai/v1/systemone"`  | TypeSafe System One endpoint.                                        |
 | `timeout_s`        | `5.0`                                     | Hard timeout for one request, in seconds.                            |
 | `task_type_cutoff` | `0.9`                                     | Lowest Jev confidence at which its task_type is recorded.            |
-| `fail_flag_cutoff` | `0.9`                                     | Lowest Jev confidence at which a FAIL is flagged as a check fault.   |
+| `fail_flag_cutoff` | `0.9`                                     | Lowest Jev confidence for a FAIL flag; unused while parked.          |
 | `held_out`         | `["research", "probe", "persona-review"]` | Task types Jev never assigns or overrides; edit the list to release. |
 
 ## API key
@@ -32,7 +32,7 @@ Without it, Jev is skipped with one line on stderr, and ringer carries on as it 
 
 Each decision point sends exactly one request, and that request carries only these state fields, cut to these caps.
 The text leaves this host verbatim up to the cap; ringer applies no other redaction.
-A task with `"redact_spec": true` sends nothing at all: task_type keeps the hand label, and a FAIL is retried as before with `{"skipped": "redact_spec"}` on its row.
+A task with `"redact_spec": true` sends nothing at all: task_type keeps the hand label, and the parked FAIL flag, once built, would skip such a FAIL with `{"skipped": "redact_spec"}` on its row.
 The constant `JEV_DECLARED_FIELDS` in `ringer.py` must equal this table, and `tests/test_jev_plumbing.py` fails if they drift.
 
 | Decision point | Field          | Source                                                | Cap (chars) |
@@ -46,7 +46,7 @@ The constant `JEV_DECLARED_FIELDS` in `ringer.py` must equal this table, and `te
 Every request runs off the asyncio event loop with a hard timeout, so a slow or hanging API never stalls other tasks.
 During `run`, at most 4 Jev requests are in flight at once, and time spent waiting for a slot does not count against `timeout_s`.
 Ringer never retries a Jev request.
-Each feature has its own breaker, so a task_type failure never turns off the FAIL flag.
+Each feature has its own breaker, so a task_type failure would never turn off the FAIL flag once it is built.
 A service-level failure prints one line on stderr and turns that feature off for the rest of the `lint` or `run` invocation:
 
 ```text
@@ -79,7 +79,7 @@ At about 100 calls a month of up to 1,500 input tokens each, Jev costs under $0.
 The FAIL flag is parked as of 2026-09-23, and `fail_flag = true` has no effect because the flag was never built.
 The offline replay ran once on 2026-09-23 with contract `fail_flag-v1` over the 47 logged FAIL pairs and missed the bar: it flagged 0 of the 11 labeled check_bug tasks and 0 tasks overall, with a highest `check` probability of 0.78 against the 0.9 cutoff.
 The replay script `scripts/jev_fail_replay.py` still sends each logged task's first FAIL to Jev with the same fields and caps a live flag would use, writes `results.jsonl`, `summary.json`, and `review.csv` into its `--out` directory, and is safe to rerun, because finished pairs are skipped.
-The bar it scores is unchanged: `bar_met: true` needs at least 9 of the 11 labeled check_bug tasks flagged, and hand-judged wrong flags in `review.csv` plus `false_flags` must total at most 20% of `flags_total`.
+The bar it scores is unchanged: `bar_met: true` needs at least 9 of the 11 labeled check_bug tasks flagged, and hand-judged wrong flags in `review.csv` plus `known_wrong_flags` (false flags and lane_outage flags, per the plan's D13 rule) must total at most 20% of `flags_total`.
 The plan's one allowed rewording (`fail_flag-v2`) was not spent, because the declared fields, not the wording, are the likely limit; the handoff `docs/handoffs/2026-09-23.jev-fail-flag-parked.md` records the evidence and the follow-up candidates.
 
 ## task_type
