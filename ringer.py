@@ -251,6 +251,13 @@ SENSITIVE_FILENAME_PARTS = {
 }
 
 
+def has_sensitive_name_part(lower_name: str) -> bool:
+    return any(
+        re.search(rf"{re.escape(part)}s?(?![a-z])", lower_name)
+        for part in SENSITIVE_FILENAME_PARTS
+    )
+
+
 @dataclass(frozen=True)
 class ContextChunk:
     path: str
@@ -336,10 +343,7 @@ def source_files(
             lower_name = candidate.name.lower()
             if any(part.startswith(".") for part in relative_parts) or (
                 lower_name.startswith(".env")
-                or any(
-                    part in lower_name
-                    for part in SENSITIVE_FILENAME_PARTS
-                )
+                or has_sensitive_name_part(lower_name)
             ):
                 skipped.append(f"{candidate}: hidden or sensitive filename")
                 continue
@@ -373,10 +377,7 @@ def source_files(
                 if (
                     resolved_name.startswith(".")
                     or resolved_lower.startswith(".env")
-                    or any(
-                        part in resolved_lower
-                        for part in SENSITIVE_FILENAME_PARTS
-                    )
+                    or has_sensitive_name_part(resolved_lower)
                 ):
                     skipped.append(
                         f"{candidate}: resolves to a hidden or sensitive "
@@ -2581,13 +2582,22 @@ def instructs_git_commit(spec: str) -> bool:
 
 
 def is_negated_git_commit(prefix: str) -> bool:
-    separators = r"[\s`'\"()\[\]{}:;,.!?-]*"
-    return bool(
-        re.search(
-            rf"(?:do\s+not|don't|never|no){separators}(?:run{separators})?$",
-            prefix,
-        )
+    separators = r"[\s`'\"()\[\]{}:;,-]*"
+    filler = (
+        r"(?:run|running|a|any|ever|should|you|circumstances|under|use|using|"
+        r"make|the|yourself|to|must|at|all)"
     )
+    cue = r"\b(?:\w+n't|not|never|no|avoid|without)\b"
+    if re.search(
+        rf"{cue}(?:{separators}{filler}\b){{0,5}}{separators}$", prefix
+    ):
+        return True
+    other_subject = (
+        r"\b(?:the\s+)?"
+        r"(?:orchestrator|reviewer|owner|human|user|operator|check|i|we)"
+        r"(?:\s+(?:will|would|shall|can|then|later))?\s+$"
+    )
+    return bool(re.search(other_subject, prefix))
 
 
 @dataclass
