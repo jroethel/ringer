@@ -709,3 +709,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 haiku (claude, docs): molt run I25 clerks kh2-t12, kh2-t13, k13-freeze - all pass first try.
 - 2026-09-25 sonnet (claude, docs): molt run I25 W4d u12e-kanban-ledger - both FAIL rows are orchestrator check bugs (unescaped leading-dash grep); output correct on first attempt. Treat both rows as amended.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W6 u14 - independent FINAL re-derivation pass, means recomputed by hand.
+- 2026-09-25 haiku (claude, docs): molt run I25 kh4-acceptance - pass first try; run complete. Run totals: 22 worker/clerk executions, 12 validator dispatches, 4 check-bug attributions (2 plan, 2 orchestrator), 1 re-route, 1 experiment repair pre-freeze.
