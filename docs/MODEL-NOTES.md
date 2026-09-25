@@ -694,3 +694,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W2a - pass verdict, all criteria walked with evidence; conduct: ran tests/receipt-gates.sh despite the repo's own plan barring it (prompt did not name it); cleanup held. Template now bars it explicitly.
 - 2026-09-25 glm-5.3 (claude-zai, docs): molt run I25 W2b u05-d2 - two validation fails on the same unit, both style discipline (one-sentence-per-line), content fully correct both times per opus validators; re-routed to opus. Spec template hardened with the pointer style rule.
 - 2026-09-25 opus (claude, docs): molt run I25 W2b u05-d2 re-route - pass first try in 66 s where glm-5.3 failed style discipline twice; validator clean on all criteria.
+- 2026-09-25 opus (background validator, code-review): molt run I25 W2c u06-d3 - pass, all criteria walked; flagged the 3b list-marker rendering quirk as a plan-format note.
