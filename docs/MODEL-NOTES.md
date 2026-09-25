@@ -701,3 +701,5 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (claude, code-review): molt run I25 W3 u10-molt-on-molt - ringer logged FAIL but attribution found a check bug (absolute-path ledger predicate vs the protocol's own ~/ style); work substantively correct, check fixed, D8-OK. Treat the FAIL row as amended.
 - 2026-09-25 haiku (claude, docs): molt run I25 W3 clerks k10-ledger-header and kh2-t10 - both pass first try (byte-copy header, diff-clean transcription).
 - 2026-09-25 opus (background validator, code-review): molt run I25 W3 u10 - pass with three high-value notes (transcript-level blindness sweep needed, vacuous status predicate, claude-plugin-eval as missed native mechanism).
+- 2026-09-25 opus (claude, code-review): molt run I25 W4 u11-fixture-run - pass first try; blinded audit found 4 of 4 planted restatements with correct tag citations and falsified the fixture's fictional premise by a second route.
+- 2026-09-25 opus (background validator, code-review): molt run I25 W4 u11 validator - pass, all criteria walked with per-line catalog verification.
