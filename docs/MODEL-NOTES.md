@@ -698,3 +698,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W2d u07-d4 - pass, all criteria walked.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W2e u08-d5 - pass, all criteria walked.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W2f u09-d6 - pass, all criteria walked; W2 totals: 6 units, 8 implementer runs (2 extra from the D2 style loop), 7 validator runs.
+- 2026-09-25 opus (claude, code-review): molt run I25 W3 u10-molt-on-molt - ringer logged FAIL but attribution found a check bug (absolute-path ledger predicate vs the protocol's own ~/ style); work substantively correct, check fixed, D8-OK. Treat the FAIL row as amended.
