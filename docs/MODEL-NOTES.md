@@ -705,3 +705,5 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W4 u11 validator - pass, all criteria walked with per-line catalog verification.
 - 2026-09-25 opus (claude, code-review): molt run I25 W4 u12a - one design repair (unscoreable b3 checklist caught pre-freeze), clean on relaunch; validator pair did exactly the job the gate exists for.
 - 2026-09-25 opus (claude, code-review): molt run I25 W5 u13-instr-files - ringer FAIL amended to check-bug (over-literal conflict-phrase predicate; audit found the required conflict via the section's body lines); C1-OK after the one-line check fix.
+- 2026-09-25 opus (claude, code-review): molt run I25 W5 u13-instr-files - substantively clean blinded audit of three private instruction files (19 findings, 4 owner conflicts surfaced); FAIL row amended to check-bug.
+- 2026-09-25 haiku (claude, docs): molt run I25 clerks kh2-t12, kh2-t13, k13-freeze - all pass first try.
