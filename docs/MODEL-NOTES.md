@@ -707,3 +707,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (claude, code-review): molt run I25 W5 u13-instr-files - ringer FAIL amended to check-bug (over-literal conflict-phrase predicate; audit found the required conflict via the section's body lines); C1-OK after the one-line check fix.
 - 2026-09-25 opus (claude, code-review): molt run I25 W5 u13-instr-files - substantively clean blinded audit of three private instruction files (19 findings, 4 owner conflicts surfaced); FAIL row amended to check-bug.
 - 2026-09-25 haiku (claude, docs): molt run I25 clerks kh2-t12, kh2-t13, k13-freeze - all pass first try.
+- 2026-09-25 sonnet (claude, docs): molt run I25 W4d u12e-kanban-ledger - both FAIL rows are orchestrator check bugs (unescaped leading-dash grep); output correct on first attempt. Treat both rows as amended.
