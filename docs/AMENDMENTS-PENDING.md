@@ -89,3 +89,4 @@ One misattributed row, same class as section A: the worker's output was audited 
 |---|---|---|
 | gitlab-glab-loop-20260809T191559Z-p881946 | task-6-fix | unsatisfiable gate: the manifest check required `.scratch/*/issues` documented in loop-setup SKILL.md while the repo's own `tests/loop-setup/acceptance.sh:18` (stale since setup.sh re-added the scratch scan in afc7fbd) failed the full suite on any `scratch` substring there; attempt 2 satisfied the check's demand and was failed by the stale test. Gate audit deleted the stale test line, salvaged the worktree diff, verified all three fix sites by hand, and committed with the full suite green (36/36) |
 - 2026-09-25 PENDING: amend run molt-harness-evidence u10-molt-on-molt (opus, code-review) FAIL -> check-bug; evidence: gate journal I25 entry 27 in jrit-loop.
+- 2026-09-25 PENDING: amend run molt-harness-evidence u13-instr-files (opus, code-review) FAIL -> check-bug; evidence: gate journal I25 entry 35 in jrit-loop.
