@@ -703,3 +703,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W3 u10 - pass with three high-value notes (transcript-level blindness sweep needed, vacuous status predicate, claude-plugin-eval as missed native mechanism).
 - 2026-09-25 opus (claude, code-review): molt run I25 W4 u11-fixture-run - pass first try; blinded audit found 4 of 4 planted restatements with correct tag citations and falsified the fixture's fictional premise by a second route.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W4 u11 validator - pass, all criteria walked with per-line catalog verification.
+- 2026-09-25 opus (claude, code-review): molt run I25 W4 u12a - one design repair (unscoreable b3 checklist caught pre-freeze), clean on relaunch; validator pair did exactly the job the gate exists for.
