@@ -11,7 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ringer import Manifest, TaskSpec, Verifier, lint_manifest  # noqa: E402
+from ringer import (  # noqa: E402
+    Manifest,
+    TaskSpec,
+    Verifier,
+    instructs_git_commit,
+    lint_manifest,
+)
 
 
 LONG_SPEC = (
@@ -168,6 +174,32 @@ class LintManifestTests(unittest.TestCase):
             "one: worker commits die with the worktree; have the worker leave changes uncommitted and export the diff in the check.",
             lint_manifest(negated_manifest),
         )
+
+    def test_w4_commit_instruction_phrasings(self) -> None:
+        for spec, expected in [
+            ("After the file is correct, run git commit with a concise message.", True),
+            ("When done, git commit your work.", True),
+            ("Don't forget to git commit.", True),
+            ("Do not forget to run git commit when finished.", True),
+            ("You will git commit at the end.", True),
+            ("Stage and git commit the change.", True),
+            ("Do not git push. When done, git commit.", True),
+            ("No. Run git commit.", True),
+            ("Do NOT run `git commit`; leave the worktree uncommitted.", False),
+            ("Do not git commit anything.", False),
+            ("Never run git commit.", False),
+            ("Avoid git commit.", False),
+            ("Under no circumstances should you git commit.", False),
+            ("Leave changes uncommitted; the orchestrator will git commit after review.", False),
+            ("Do not, under any circumstances, run git commit.", False),
+            ("You must not git commit.", False),
+            ("You should never run a git commit.", False),
+            ("Without running git commit, export the diff.", False),
+            ("No `git commit`, no `git push`.", False),
+            ("Never use git commit or git push.", False),
+        ]:
+            with self.subTest(spec=spec):
+                self.assertEqual(instructs_git_commit(spec), expected)
 
     def test_w5_serial_fan_out(self) -> None:
         manifest = self.manifest(

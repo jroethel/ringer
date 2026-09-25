@@ -66,6 +66,7 @@ class CatalogTests(unittest.TestCase):
         # ~/.ringer/ringer.db (this exact leak put 'proven-model' on the
         # live public scoreboard, 2026-07-10).
         os.environ["RINGER_HOME"] = str(self.root / "ringer-home")
+        os.environ.pop("RINGER_NO_CATALOG_REFRESH", None)
 
     def restore_env(self) -> None:
         os.environ.clear()

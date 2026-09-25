@@ -129,6 +129,35 @@ class ContextPacketTests(unittest.TestCase):
                 any("sensitive filename" in item for item in packet.skipped)
             )
 
+    def test_extended_sensitive_words_are_selected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_root:
+            root = Path(temp_root)
+            (root / "tokenizer.py").write_text(
+                "def tokenize(text):\n    return text.split()\n",
+                encoding="utf-8",
+            )
+            (root / "token.json").write_text(
+                '{"token": "t0k3n-v4lu3"}\n',
+                encoding="utf-8",
+            )
+            (root / "secrets.py").write_text(
+                "SECRET = 't0k3n-v4lu3'\n",
+                encoding="utf-8",
+            )
+            packet = build_context_packet(
+                "how does tokenize split text?",
+                sources=[root],
+                max_packet_bytes=8_000,
+            )
+            self.assertIn("text.split()", packet.text)
+            self.assertNotIn("t0k3n-v4lu3", packet.text)
+            sensitive_skips = [
+                item for item in packet.skipped if "sensitive filename" in item
+            ]
+            self.assertEqual(len(sensitive_skips), 2, packet.skipped)
+            self.assertTrue(any("token.json" in item for item in sensitive_skips))
+            self.assertTrue(any("secrets.py" in item for item in sensitive_skips))
+
     def test_duplicate_content_is_selected_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_root:
             root = Path(temp_root)

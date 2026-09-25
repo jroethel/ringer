@@ -39,6 +39,20 @@ allow_full_access = false
 # dir = "~/.ringer/steering"
 # inject_candidates = true
 
+# Optional Jev (TypeSafe System One) integration. Everything is off by default.
+# docs/JEV.md lists exactly which fields each switch sends off this host.
+# The API key is read from the TYPESAFE_API_KEY environment variable only.
+# [jev]
+# enabled = false
+# task_type = false
+# fail_flag = false
+# model = "jev-1.13.0"
+# endpoint = "https://api.typesafe.ai/v1/systemone"
+# timeout_s = 5.0
+# task_type_cutoff = 0.9
+# fail_flag_cutoff = 0.9
+# held_out = ["research", "probe", "persona-review"]
+
 [eval]
 # Safe public default: write one JSON object per attempt to a local JSONL file.
 # Use "postgres" only when [eval.postgres] is configured.

@@ -371,6 +371,29 @@ The promotion ladder is the point. A model enters as **untested**. You spend a s
 
 The per-user philosophy, stated plainly: every user's workload is different, so the scoreboard learns what works for *your* tasks on *your* machine. A model that's proven in someone else's log is untested in yours until you've run it. The numbers are not portable between users, and the routing recommendations get personal as the log grows — which is exactly why the catalog and the change log stay local and the explore tiers are computed from your own `runs.jsonl`, not from anyone's aggregate.
 
+## Jev task_type (optional)
+
+Ringer can ask Jev, the System One model from TypeSafe, to assign each task's `task_type`, the label the scoreboard groups by.
+It is off by default, and with it off, the key unset, or the API unreachable, ringer behaves exactly as it does without Jev.
+To turn it on, export your key and add a `[jev]` table to `~/.config/ringer/config.toml`:
+
+```bash
+export TYPESAFE_API_KEY='<your key>'
+```
+
+```toml
+[jev]
+enabled = true    # master switch; false turns every Jev feature off
+task_type = true  # the task_type feature
+```
+
+Then `./ringer.py lint manifest.json` prints one `jev:` line per task comparing Jev's pick with your hand label, and `run` records the result on every attempt row.
+Jev's label replaces yours only at 0.9 confidence or higher, and never for `research`, `probe`, or `persona-review`.
+Each request sends the task's spec, up to 12,000 characters, off this host; a task with `"redact_spec": true` sends nothing and keeps its hand label.
+To turn it off, set `enabled = false` or delete the table.
+The `fail_flag` switch has no effect; that feature was closed without being built.
+Settings, caching, cost, and fallback behavior are documented in [`docs/JEV.md`](docs/JEV.md).
+
 ## Steering profiles
 
 Ringer can optionally load per-model steering profiles, prepend applicable worker rules to both first-attempt and retry prompts, print driver guidance for the orchestrator, and collect one local observation row per attempt. The feature is fail-open: missing or malformed steering data never blocks a run. Setup, the profile contract, and the observation schema are documented in [`docs/STEERING.md`](docs/STEERING.md).

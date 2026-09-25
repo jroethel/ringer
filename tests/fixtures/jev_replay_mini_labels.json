@@ -1,0 +1,5 @@
+[
+ {"run_id": "r1", "task_key": "a", "label": "check_bug"},
+ {"run_id": "r3", "task_key": "e", "label": "spec_defect"},
+ {"run_id": "r3", "task_key": "f", "label": "lane_outage"}
+]
