@@ -695,3 +695,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 glm-5.3 (claude-zai, docs): molt run I25 W2b u05-d2 - two validation fails on the same unit, both style discipline (one-sentence-per-line), content fully correct both times per opus validators; re-routed to opus. Spec template hardened with the pointer style rule.
 - 2026-09-25 opus (claude, docs): molt run I25 W2b u05-d2 re-route - pass first try in 66 s where glm-5.3 failed style discipline twice; validator clean on all criteria.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W2c u06-d3 - pass, all criteria walked; flagged the 3b list-marker rendering quirk as a plan-format note.
+- 2026-09-25 opus (background validator, code-review): molt run I25 W2d u07-d4 - pass, all criteria walked.
