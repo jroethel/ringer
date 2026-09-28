@@ -719,6 +719,11 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-25 opus (background validator, code-review): molt run I25 W6 u14 - independent FINAL re-derivation pass, means recomputed by hand.
 - 2026-09-25 haiku (claude, docs): molt run I25 kh4-acceptance - pass first try; run complete. Run totals: 22 worker/clerk executions, 12 validator dispatches, 4 check-bug attributions (2 plan, 2 orchestrator), 1 re-route, 1 experiment repair pre-freeze.
 
+- 2026-09-28 sonnet (background implementer, code-refactor): sfextract #4 plan B4, 2 tasks - pass first try; every plan test count reproduced (122, 5 failed/26 passed, 131, 133); validator pass; live content-identity checkpoint 4/4 identical.
+- 2026-09-28 sonnet (background implementer, code-feature): sfextract #6 plan I6, 4 tasks incl. 28 exact guide-citation replacements - pass first try; 139 passed, ruff clean; validator pass; live checkpoint 7/7.
+- 2026-09-28 opus (background validator, code-review): sfextract #4 and #6 - both pass with before-counts reproduced at base; surfaced 2 pre-existing F401s and a cwd-fragile coverage-script test (fixed in sfextract 59825f3).
+- 2026-09-28 signal (orchestrator check bug, not a worker fault): the #4 human checkpoint script ran `git worktree add /tmp/sfx-base main` while main was checked out, so the base side silently produced nothing and every file read as DIFFERS; fixed with `--detach` plus an empty-side INVALID guard, rerun clean.
+
 ## glm-5.3 prompting and harness notes (dossier + molt reverse-test rows, 2026-09-26)
 - Identity: released 2026-08-14 (Z.ai/Zhipu), same 744B-A40B MoE base as glm-5.2, gains post-training; weights zai-org/GLM-5.3; paper arxiv 2602.15763.
 - Reasoning always on (cannot be disabled; 400); reasoning_effort low/high/max, default max, vendor recommends max for coding; sampling defaults temp 1.0 / top_p 0.95, tune only one; tool_choice auto only. Source: docs.z.ai/guides/llm/glm-5.3 (serves .md; undated).
