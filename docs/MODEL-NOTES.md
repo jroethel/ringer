@@ -745,3 +745,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W6 t15 (x2) and t17 - the first t15 verdict was spec-problem with the exact plan line and a one-line fix, which is the verdict class doing its job; t17 pass with every expected value recomputed via numpy by a different route.
 - 2026-09-29 sonnet (claude, docs): dshoney step08 W7 t16-user-guide (241-line guide written against the code, effort high) - pass first try in 127s; validator spot-checked three factual claims against source lines, all held.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W7 t16 - pass on 15 criteria; surfaced two prose ambiguities inherited from the plan for the human content review.
+- 2026-09-29 sonnet (claude, docs): dshoney step08 W8 t18-version-bump (pin:user over haiku) - pass first try in 47s; version-only diff.
