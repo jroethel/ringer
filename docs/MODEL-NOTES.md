@@ -737,3 +737,5 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W2 t07-frames-attribute - pass on 13 criteria; identity checks after coercion and set_time_index and the no-sources load edge case verified in memory.
 - 2026-09-29 sonnet (claude, code-fix): dshoney step08 W3 t10-list-destinations (11 files, list destinations + labeled routing + migration regen) - pass first try in 126s; validator found every hunk traced to the plan.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W3 t10 - pass on 13 criteria; surfaced pre-existing F401s outside the unit (recorded, not fixed).
+- 2026-09-29 sonnet (claude, code-fix): dshoney step08 W4 t11-t13 (ringer, worktrees) - 3/3 pass first try in 69-94s; the T13 handler refactor matched the plan's code verbatim and regenerated docs in the same patch.
+- 2026-09-29 opus (background validator, code-review): dshoney step08 W4 t13-op-collisions - pass on 13 criteria; in-memory probes confirmed no partial store on collision and the loaded-data producer name.
