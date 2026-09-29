@@ -735,3 +735,5 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W1 t01-chain-resolution - pass on 13 criteria with independent reruns and in-memory identity checks (declared_forms is the same dict object; materialize cache keys unchanged).
 - 2026-09-29 sonnet (claude, code-fix): dshoney step08 W2 t07-t09 (ringer, worktrees) - 3/3 pass first try in 55-82s; the T7 frames refactor touched 7 files surgically with no orphan; -W error went clean.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W2 t07-frames-attribute - pass on 13 criteria; identity checks after coercion and set_time_index and the no-sources load edge case verified in memory.
+- 2026-09-29 sonnet (claude, code-fix): dshoney step08 W3 t10-list-destinations (11 files, list destinations + labeled routing + migration regen) - pass first try in 126s; validator found every hunk traced to the plan.
+- 2026-09-29 opus (background validator, code-review): dshoney step08 W3 t10 - pass on 13 criteria; surfaced pre-existing F401s outside the unit (recorded, not fixed).
