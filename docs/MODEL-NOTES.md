@@ -739,3 +739,4 @@ checks and raw logs support — no vibes, no worker self-reports.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W3 t10 - pass on 13 criteria; surfaced pre-existing F401s outside the unit (recorded, not fixed).
 - 2026-09-29 sonnet (claude, code-fix): dshoney step08 W4 t11-t13 (ringer, worktrees) - 3/3 pass first try in 69-94s; the T13 handler refactor matched the plan's code verbatim and regenerated docs in the same patch.
 - 2026-09-29 opus (background validator, code-review): dshoney step08 W4 t13-op-collisions - pass on 13 criteria; in-memory probes confirmed no partial store on collision and the loaded-data producer name.
+- 2026-09-29 sonnet (claude, code-fix): dshoney step08 W5 t14-fallback-path - pass first try in 59s; surgical 27-line src diff plus two regression tests.
