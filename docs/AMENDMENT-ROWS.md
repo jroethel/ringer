@@ -59,3 +59,9 @@ Append-only amendment rows in `runs.jsonl`, written by an explicit CLI command; 
 2. `runs.jsonl` after amending contains only appended rows; every original row byte-identical.
 3. Re-running `amend` with the same args changes nothing and says so.
 4. A run that was legitimately failed by its check cannot be distinguished mechanically - the command trusts its caller; the `note` field is mandatory for the audit trail.
+
+### Second reclassify value: infra
+
+`infra` is the second `--reclassify` value, added 2026-09-30.
+It marks an attempt that failed because the worker lane or environment failed, such as a provider 429 insufficient-balance response.
+It voids the `(run_id, task_key)` exactly like `check_bug`.

@@ -89,6 +89,18 @@ class TestAmendmentExclusion(unittest.TestCase):
         groups = aggregate_model_log_rows(_read(rows))
         self.assertFalse(any(x["model"] == "solo" for x in groups))
 
+    def test_infra_amendment_voids_like_check_bug(self):
+        rows = [
+            {"run_id": "r8", "task_key": "t8", "worker_engine": "opencode", "model": "lane",
+             "task_type": "docs", "verdict": "FAIL", "duration_ms": 1, "worker_tokens": 1,
+             "retry": False, "logged_at": "2026-07-01T10:00:00+00:00"},
+            {"type": "amendment", "run_id": "r8", "task_key": "t8", "reclassify": "infra",
+             "note": "HTTP 429 insufficient balance", "amended_at": "2026-07-02T00:00:00+00:00",
+             "logged_at": "2026-07-02T00:00:00+00:00", "identity": "tester"},
+        ]
+        groups = aggregate_model_log_rows(_read(rows))
+        self.assertFalse(any(x["model"] == "lane" for x in groups))
+
 
 if __name__ == "__main__":
     unittest.main()

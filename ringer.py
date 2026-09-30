@@ -6569,7 +6569,7 @@ def partition_amendments(
     notes_by_task: dict[tuple[str, str], list[str]] = {}
     for row in rows:
         if row.get("type") == "amendment":
-            if row.get("reclassify") == "check_bug":
+            if row.get("reclassify") in ("check_bug", "infra"):
                 key = (row.get("run_id"), row.get("task_key"))
                 voided.add(key)
                 notes_by_task.setdefault(key, []).append(model_log_text(row.get("note")))
@@ -11740,11 +11740,17 @@ def build_parser() -> argparse.ArgumentParser:
     models_parser.add_argument("--open", action="store_true", help="render the HTML scoreboard to the artifact library and open it")
     models_parser.add_argument("--json", action="store_true", help="print the scoreboard as JSON")
 
-    amend_parser = subparsers.add_parser("amend", help="append a check-bug reclassification to the eval log")
+    amend_parser = subparsers.add_parser("amend", help="append a check-bug or infra reclassification to the eval log")
     amend_parser.add_argument("run_id")
     amend_parser.add_argument("task_key")
-    amend_parser.add_argument("--reclassify", choices=["check_bug"], required=True)
-    amend_parser.add_argument("--note", required=True, help="why the check was wrong (mandatory audit trail)")
+    amend_parser.add_argument(
+        "--reclassify",
+        choices=["check_bug", "infra"],
+        required=True,
+        help="check_bug: the check was wrong; infra: the worker lane or environment failed "
+        "(provider billing or rate limit, outage, auth, missing tool), not the model's work",
+    )
+    amend_parser.add_argument("--note", required=True, help="why the attempt should not count against the model (mandatory audit trail)")
     amend_parser.add_argument("--identity", help="who is amending; falls through resolve_identity() if omitted")
     amend_parser.add_argument("--log", type=Path, help="path to the eval JSONL log (overrides config)")
 
