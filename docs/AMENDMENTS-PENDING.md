@@ -91,3 +91,4 @@ One misattributed row, same class as section A: the worker's output was audited 
 - 2026-09-25 PENDING: amend run molt-harness-evidence u10-molt-on-molt (opus, code-review) FAIL -> check-bug; evidence: gate journal I25 entry 27 in jrit-loop.
 - 2026-09-25 PENDING: amend run molt-harness-evidence u13-instr-files (opus, code-review) FAIL -> check-bug; evidence: gate journal I25 entry 35 in jrit-loop.
 - 2026-09-25 PENDING: amend run molt-harness-evidence u12e-kanban-ledger (sonnet, docs) FAIL x2 -> check-bug; evidence: gate journal I25 entry 41 in jrit-loop.
+- 2026-10-02 FILED: the three molt-harness-evidence amends above are tracked as jroethel/ringer issues #6, #7, #8.
