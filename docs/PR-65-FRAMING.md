@@ -1,4 +1,4 @@
-# Amendment rows as the routing integrity layer (ringer #65)
+# Amendment rows as the routing integrity layer (upstream NateBJones-Projects/ringer #65)
 
 This note is the argument for upstream acceptance of issue #65 (amendment rows).
 It is written to be lifted into the PR description.

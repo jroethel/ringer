@@ -1,6 +1,9 @@
 # Ringer
 
-[![tests](https://github.com/NateBJones-Projects/ringer/actions/workflows/tests.yml/badge.svg)](https://github.com/NateBJones-Projects/ringer/actions/workflows/tests.yml)
+[![tests](https://github.com/jroethel/ringer/actions/workflows/tests.yml/badge.svg)](https://github.com/jroethel/ringer/actions/workflows/tests.yml)
+
+This is Jeremy Roethel's working fork of [NateBJones-Projects/ringer](https://github.com/NateBJones-Projects/ringer).
+Issues, plans, and the model log for this fork live here: the tracker is [jroethel/ringer/issues](https://github.com/jroethel/ringer/issues), and an upstream issue is always written as `upstream #N`.
 
 ![Ringer — she reviews; the wall works](docs/hero.png)
 
@@ -43,7 +46,7 @@ codex login                    # sign in with your ChatGPT plan
 2. Get the repo:
 
 ```bash
-git clone https://github.com/NateBJones-Projects/ringer && cd ringer
+git clone https://github.com/jroethel/ringer && cd ringer
 mkdir -p ~/.config/ringer && cp config.sample.toml ~/.config/ringer/config.toml   # optional — sane defaults without it
 ```
 
