@@ -751,6 +751,30 @@ class EngineConfig:
 
 
 @dataclass(frozen=True)
+class EngineBinDiagnostic:
+    engine: str
+    config_key: str
+    value: str
+    path_value: str | None
+    path_was_set: bool
+    default_search_path: str = field(default_factory=lambda: os.defpath)
+
+    @property
+    def searched_path_display(self) -> str:
+        if not self.path_was_set:
+            return f"<unset> (shutil default: {self.default_search_path!r})"
+        if self.path_value == "":
+            return "<empty>"
+        return repr(self.path_value)
+
+    def warning(self) -> str:
+        return (
+            f"ringer.py: warning: {self.config_key} = {self.value!r} is not resolvable; "
+            f"searched PATH: {self.searched_path_display}"
+        )
+
+
+@dataclass(frozen=True)
 class PostgresEvalConfig:
     env_file: Path
 
@@ -1069,6 +1093,8 @@ class AppConfig:
     steering: SteeringConfig = field(default_factory=SteeringConfig)
     update: UpdateConfig = field(default_factory=UpdateConfig)
     jev: JevConfig = field(default_factory=JevConfig)
+    engine_bin_diagnostics: tuple[EngineBinDiagnostic, ...] = ()
+    reuse_open_tab: bool = True
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppConfig":
@@ -1089,11 +1115,17 @@ class AppConfig:
         if dashboard_port_base <= 0:
             raise ValueError("dashboard_port_base must be positive")
         hud_port = load_hud_port(data.get("hud"))
+        reuse_open_tab = bool((data.get("hud") or {}).get("reuse_open_tab", True))
         identity_default = optional_string(data.get("identity_default"))
         hud_app_path = optional_path(data.get("hud_app_path"))
         allow_full_access = bool(data.get("allow_full_access", False))
         eval_config = load_eval_config(data.get("eval"), state_dir)
-        engines = load_engines(data.get("engines"))
+        raw_engines = data.get("engines")
+        engines = load_engines(raw_engines)
+        engine_bin_diagnostics = collect_engine_bin_diagnostics(
+            engines,
+            engine_names=configured_engine_names(raw_engines),
+        )
         artifact_config = load_artifact_config(data.get("artifact"), state_dir)
         update_config = load_update_config(data.get("update"))
         jev_config = load_jev_config(data.get("jev"))
@@ -1109,6 +1141,7 @@ class AppConfig:
             state_dir=state_dir,
             dashboard_port_base=dashboard_port_base,
             hud_port=hud_port,
+            reuse_open_tab=reuse_open_tab,
             hud_app_path=hud_app_path,
             allow_full_access=allow_full_access,
             eval=eval_config,
@@ -1117,6 +1150,7 @@ class AppConfig:
             steering=steering_config,
             update=update_config,
             jev=jev_config,
+            engine_bin_diagnostics=engine_bin_diagnostics,
         )
 
 
@@ -2007,6 +2041,71 @@ def load_hud_port(raw: Any) -> int:
     if port <= 0:
         raise ValueError("hud.port must be positive")
     return port
+
+
+def configured_engine_names(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, dict):
+        return ()
+    names: list[str] = []
+    for name in raw:
+        clean = str(name).strip()
+        if clean:
+            names.append(clean)
+    return tuple(names)
+
+
+def has_path_separator(value: str) -> bool:
+    separators = tuple(sep for sep in (os.sep, os.altsep) if sep)
+    return any(sep in value for sep in separators)
+
+
+def collect_engine_bin_diagnostics(
+    engines: dict[str, EngineConfig],
+    *,
+    engine_names: Iterable[str] | None = None,
+    path_value: str | None = None,
+    path_was_set: bool | None = None,
+) -> tuple[EngineBinDiagnostic, ...]:
+    if path_was_set is None:
+        path_was_set = "PATH" in os.environ
+    if path_value is None and path_was_set:
+        path_value = os.environ.get("PATH", "")
+    search_path = path_value if path_was_set else os.defpath
+    names = tuple(engine_names) if engine_names is not None else tuple(engines)
+
+    diagnostics: list[EngineBinDiagnostic] = []
+    for name in names:
+        engine = engines.get(name)
+        if engine is None:
+            continue
+        bin_value = engine.bin
+        if has_path_separator(bin_value):
+            continue
+        if shutil.which(bin_value, path=search_path) is not None:
+            continue
+        diagnostics.append(
+            EngineBinDiagnostic(
+                engine=name,
+                config_key=f"engines.{name}.bin",
+                value=bin_value,
+                path_value=path_value,
+                path_was_set=path_was_set,
+            )
+        )
+    return tuple(diagnostics)
+
+
+def print_engine_bin_diagnostics(config: AppConfig) -> None:
+    for diagnostic in config.engine_bin_diagnostics:
+        print(diagnostic.warning(), file=sys.stderr)
+
+
+def print_engine_bin_diagnostics_if_config_loads(path: Path | None) -> None:
+    try:
+        config = AppConfig.load(path)
+    except Exception:
+        return
+    print_engine_bin_diagnostics(config)
 
 
 def load_engines(raw: Any) -> dict[str, EngineConfig]:
@@ -5879,6 +5978,11 @@ def send_response_body(
 ) -> None:
     handler.send_response(status)
     handler.send_header("Content-Type", content_type)
+    # The native webview reads only this local HUD. Never expose it to arbitrary sites.
+    origin = handler.headers.get("Origin", "")
+    if origin in {"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}:
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Vary", "Origin")
     if no_store:
         handler.send_header("Cache-Control", "no-store")
     handler.send_header("Content-Length", str(len(body)))
@@ -6039,6 +6143,7 @@ class PersistentHudServer:
         self.model_db_path: Path | None = None
         self.model_notes_path: Path | None = None
         self.update_status: dict[str, Any] | None = None
+        self.last_viewer_ping: float | None = None
 
     def start(self) -> int:
         state_dir = self.state_dir
@@ -6049,6 +6154,18 @@ class PersistentHudServer:
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 path = urllib.parse.urlparse(self.path).path
+                if path == "/api/viewer-ping":
+                    server_ref.last_viewer_ping = time.monotonic()
+                    self.send_response(HTTPStatus.NO_CONTENT)
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return
+                if path == "/api/viewer-status":
+                    last_ping = server_ref.last_viewer_ping
+                    send_json_response(self, {
+                        "seconds_since_viewer": None if last_ping is None else time.monotonic() - last_ping,
+                    })
+                    return
                 if path == "/":
                     body = read_ringside_html().encode("utf-8")
                     send_response_body(
@@ -6057,6 +6174,23 @@ class PersistentHudServer:
                         body,
                         content_type="text/html; charset=utf-8",
                     )
+                    return
+                frontend_assets = {
+                    "/ringside.css": (RINGSIDE_HTML_PATH.with_name("ringside.css"), "text/css; charset=utf-8"),
+                    "/ringside.js": (RINGSIDE_HTML_PATH.with_name("ringside.js"), "text/javascript; charset=utf-8"),
+                    "/hud.js": (Path(__file__).resolve().parent / "hud" / "frontend" / "hud.js", "text/javascript; charset=utf-8"),
+                    "/assets/ringside-mark.svg": (RINGSIDE_HTML_PATH.parent / "assets" / "ringside-mark.svg", "image/svg+xml"),
+                    "/assets/ringside-live.svg": (RINGSIDE_HTML_PATH.parent / "assets" / "ringside-live.svg", "image/svg+xml"),
+                    "/assets/ringside-attention.svg": (RINGSIDE_HTML_PATH.parent / "assets" / "ringside-attention.svg", "image/svg+xml"),
+                }
+                if path in frontend_assets:
+                    asset_path, content_type = frontend_assets[path]
+                    try:
+                        body = asset_path.read_bytes()
+                    except OSError:
+                        self.send_error(HTTPStatus.NOT_FOUND)
+                        return
+                    send_response_body(self, HTTPStatus.OK, body, content_type=content_type, no_store=True)
                     return
                 if path == "/api/runs":
                     send_json_response(
@@ -6086,8 +6220,8 @@ class PersistentHudServer:
                         }
                     send_json_response(self, payload)
                     return
-                if path.startswith("/api/open-folder"):
-                    query = urllib.parse.urlparse(path).query
+                if path == "/api/open-folder":
+                    query = urllib.parse.urlparse(self.path).query
                     params = urllib.parse.parse_qs(query)
                     name = (params.get("artifact") or [""])[0]
                     run_id = (params.get("run") or [""])[0]
@@ -6104,8 +6238,7 @@ class PersistentHudServer:
                             return
                         if sys.platform == "darwin":
                             subprocess.Popen(["open", str(resolved)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                            self.send_response(HTTPStatus.NO_CONTENT)
-                            self.end_headers()
+                            send_response_body(self, HTTPStatus.NO_CONTENT, b"", content_type="text/plain; charset=utf-8", no_store=True)
                         else:
                             self.send_error(HTTPStatus.NOT_IMPLEMENTED)
                     except Exception:
@@ -10886,25 +11019,25 @@ def create_demo_manifest() -> Path:
         "tasks": [
             {
                 "key": "alpha",
-                "spec": "Create alpha.txt in the current working directory containing exactly: alpha ready\nDo not add punctuation. Do not write any other files.",
-                "check": "test \"$(cat alpha.txt 2>/dev/null)\" = \"alpha ready\" || { echo 'FAIL: alpha.txt missing or content is not alpha ready'; exit 1; }",
-                "verified": "alpha.txt exists and contains exactly the expected text",
+                "spec": "Create alpha.txt in the current working directory containing exactly one line: alpha ready\nEnd the file with exactly one newline. Do not add punctuation. Do not write any other files.",
+                "check": "printf 'alpha ready\\n' | diff -u - alpha.txt || { echo 'FAIL: alpha.txt must contain exactly alpha ready followed by one newline'; exit 1; }",
+                "verified": "alpha.txt exists and contains exactly alpha ready followed by one newline",
                 "expect_files": ["alpha.txt"],
                 "task_type": "probe",
             },
             {
                 "key": "bravo",
-                "spec": "Create bravo.txt in the current working directory containing exactly: bravo ready\nDo not add punctuation. Do not write any other files.",
-                "check": "test \"$(cat bravo.txt 2>/dev/null)\" = \"bravo ready\" || { echo 'FAIL: bravo.txt missing or content is not bravo ready'; exit 1; }",
-                "verified": "bravo.txt exists and contains exactly the expected text",
+                "spec": "Create bravo.txt in the current working directory containing exactly one line: bravo ready\nEnd the file with exactly one newline. Do not add punctuation. Do not write any other files.",
+                "check": "printf 'bravo ready\\n' | diff -u - bravo.txt || { echo 'FAIL: bravo.txt must contain exactly bravo ready followed by one newline'; exit 1; }",
+                "verified": "bravo.txt exists and contains exactly bravo ready followed by one newline",
                 "expect_files": ["bravo.txt"],
                 "task_type": "probe",
             },
             {
                 "key": "charlie",
-                "spec": "Create charlie.txt in the current working directory containing exactly: charlie ready\nDo not add punctuation. Do not write any other files.",
-                "check": "test \"$(cat charlie.txt 2>/dev/null)\" = \"charlie ready\" || { echo 'FAIL: charlie.txt missing or content is not charlie ready'; exit 1; }",
-                "verified": "charlie.txt exists and contains exactly the expected text",
+                "spec": "Create charlie.txt in the current working directory containing exactly one line: charlie ready\nEnd the file with exactly one newline. Do not add punctuation. Do not write any other files.",
+                "check": "printf 'charlie ready\\n' | diff -u - charlie.txt || { echo 'FAIL: charlie.txt must contain exactly charlie ready followed by one newline'; exit 1; }",
+                "verified": "charlie.txt exists and contains exactly charlie ready followed by one newline",
                 "expect_files": ["charlie.txt"],
                 "task_type": "probe",
             },
@@ -11479,6 +11612,25 @@ def start_hud_update_maintenance(
         return None
 
 
+def hud_viewer_seconds_since_ping(port: int) -> float | None:
+    """Read the viewer heartbeat, allowing older HUDs to fail the lookup."""
+    url = f"http://127.0.0.1:{port}/api/viewer-status"
+    with urllib.request.urlopen(url, timeout=1) as response:
+        value = json.load(response).get("seconds_since_viewer")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def hud_has_recent_viewer(port: int) -> bool:
+    """A missing or failed heartbeat lookup should still allow a browser open."""
+    try:
+        seconds = hud_viewer_seconds_since_ping(port)
+        return seconds is not None and 0 <= seconds < 15
+    except Exception:
+        return False
+
+
 def ensure_hud_running(config: AppConfig, *, open_browser: bool) -> None:
     """Make sure the persistent Ringside page is up before a run starts.
 
@@ -11505,14 +11657,23 @@ def ensure_hud_running(config: AppConfig, *, open_browser: bool) -> None:
                 break
             time.sleep(0.15)
     if open_browser and not already_alive and hud_is_alive(port):
-        open_in_browser(url)
+        if not (config.reuse_open_tab and hud_has_recent_viewer(port)):
+            open_in_browser(url)
     print(f"Ringside: {url}", flush=True)
 
 
-def run_persistent_hud(config: AppConfig, *, port: int | None, open_viewer: bool) -> int:
+def run_persistent_hud(
+    config: AppConfig, *, port: int | None, open_viewer: bool, force_open: bool = False,
+) -> int:
     chosen_port = port if port is not None else config.hud_port
     if hud_is_alive(chosen_port):
         url = f"http://127.0.0.1:{chosen_port}"
+        if open_viewer and not force_open and config.reuse_open_tab and hud_has_recent_viewer(chosen_port):
+            print(
+                f"Ringside is already open in a browser tab: {url} "
+                "(not opening another; use --force-open to open one anyway)"
+            )
+            return 0
         print(f"Ringside is already running: {url}")
         if open_viewer:
             open_in_browser(url)
@@ -11713,6 +11874,7 @@ def build_parser() -> argparse.ArgumentParser:
     hud_parser.add_argument("--config", type=Path, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     hud_parser.add_argument("--port", type=int, help=f"port to bind on 127.0.0.1 (default: {DEFAULT_HUD_PORT})")
     hud_parser.add_argument("--no-open", action="store_true", help="start the server without opening a browser")
+    hud_parser.add_argument("--force-open", action="store_true", help="open a new browser tab even if Ringside is already open")
 
     db_parser = subparsers.add_parser("db", help="manage the derived SQLite read model")
     db_parser.add_argument("--config", type=Path, default=argparse.SUPPRESS, help=argparse.SUPPRESS)
@@ -11835,6 +11997,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "lint":
             manifest = Manifest.from_path(args.manifest)
+            print_engine_bin_diagnostics_if_config_loads(args.config)
             findings = lint_manifest(
                 manifest,
                 allow_noncanonical_route=args.allow_noncanonical_route,
@@ -11854,6 +12017,7 @@ def main(argv: list[str] | None = None) -> int:
             return run_catalog_command(args)
 
         config = AppConfig.load(args.config)
+        print_engine_bin_diagnostics(config)
         if args.command == "db":
             return run_db_command(config, args)
         if args.command == "models":
@@ -11867,6 +12031,7 @@ def main(argv: list[str] | None = None) -> int:
                 config,
                 port=args.port,
                 open_viewer=not args.no_open,
+                force_open=args.force_open,
             )
         if args.command == "ask":
             if args.timeout_s <= 0:
